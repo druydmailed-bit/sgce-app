@@ -1369,3 +1369,167 @@ textarea.form-control {
 .contrato-itens-table .btn-icon {
     padding: 4px;
 }
+
+/* ========== LOGIN SCREEN ========== */
+.login-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+}
+.login-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 40px 36px;
+    width: 380px;
+    max-width: 92vw;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+.login-logo svg {
+    margin-bottom: 12px;
+}
+.login-logo h1 {
+    font-size: 28px;
+    color: var(--neon);
+    margin: 0;
+    letter-spacing: 3px;
+}
+.login-logo p {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 4px 0 24px;
+}
+.login-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.btn-login {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 14px 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+.btn-login.admin {
+    background: rgba(var(--neon-rgb), 0.1);
+    color: var(--neon);
+    border-color: rgba(var(--neon-rgb), 0.3);
+}
+.btn-login.admin:hover {
+    background: rgba(var(--neon-rgb), 0.2);
+    border-color: var(--neon);
+}
+.btn-login.consulta {
+    background: rgba(59,130,246,0.1);
+    color: #60a5fa;
+    border-color: rgba(59,130,246,0.3);
+}
+.btn-login.consulta:hover {
+    background: rgba(59,130,246,0.2);
+    border-color: #60a5fa;
+}
+.login-form {
+    margin-top: 16px;
+    text-align: left;
+}
+.login-form .form-group {
+    margin-bottom: 12px;
+}
+.login-form label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+/* ========== CONSULTATION MODE BANNER ========== */
+.consulta-banner {
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.3);
+    color: #60a5fa;
+    padding: 8px 16px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.consulta-banner button {
+    background: none;
+    border: 1px solid rgba(59,130,246,0.4);
+    color: #60a5fa;
+    padding: 4px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 11px;
+    font-family: inherit;
+}
+.consulta-banner button:hover {
+    background: rgba(59,130,246,0.15);
+}
+
+/* ========== SIGNALING PANEL ========== */
+.signal-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.signal-card .signal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+.signal-card .signal-header strong {
+    color: var(--text);
+}
+.signal-card .signal-body {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+.signal-card .signal-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 8px;
+}
+
+/* ========== PENDENCIAS FILTER TOGGLE ========== */
+.filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    transition: all 0.2s;
+    font-family: inherit;
+    margin-right: 8px;
+}
+.filter-toggle:hover {
+    border-color: var(--neon);
+    color: var(--neon);
+}
+.filter-toggle.active {
+    background: rgba(var(--neon-rgb), 0.1);
+    border-color: rgba(var(--neon-rgb), 0.3);
+    color: var(--neon);
+}

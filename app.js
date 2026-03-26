@@ -25,7 +25,7 @@ const DB = {
 };
 
 // ========== FIREBASE REAL-TIME SYNC ==========
-const SYNC_KEYS = ['materiais','fornecedores','contratos','rcs','entregas','pendencias','sapConfig','quickNotes','emailConfig','templates_rc'];
+const SYNC_KEYS = ['materiais','fornecedores','contratos','rcs','entregas','pendencias','sinalizacoes','sapConfig','quickNotes','emailConfig','templates_rc'];
 let _firebaseReady = false;
 let _syncStatusEl = null;
 
@@ -110,6 +110,98 @@ function updateSyncStatus(status) {
     }
 }
 
+// ========== AUTH SYSTEM ==========
+const AUTH_USERS = [
+    { user: 'Lucas Marques', pass: '456456', role: 'admin' }
+];
+let currentUserRole = null; // 'admin' or 'consulta'
+
+function showLoginForm() {
+    document.getElementById('loginForm').style.display = 'block';
+    document.querySelector('.login-buttons').style.display = 'none';
+    setTimeout(() => document.getElementById('loginUser').focus(), 100);
+}
+
+function hideLoginForm() {
+    document.getElementById('loginForm').style.display = 'none';
+    document.querySelector('.login-buttons').style.display = 'flex';
+    document.getElementById('loginError').style.display = 'none';
+}
+
+function doLogin() {
+    const user = document.getElementById('loginUser').value.trim();
+    const pass = document.getElementById('loginPass').value;
+    const found = AUTH_USERS.find(u => u.user.toLowerCase() === user.toLowerCase() && u.pass === pass);
+    if (found) {
+        currentUserRole = found.role;
+        sessionStorage.setItem('sgce_role', found.role);
+        sessionStorage.setItem('sgce_user', found.user);
+        enterApp();
+    } else {
+        const errEl = document.getElementById('loginError');
+        errEl.textContent = 'Usuário ou senha incorretos';
+        errEl.style.display = 'block';
+    }
+}
+
+function loginConsulta() {
+    currentUserRole = 'consulta';
+    sessionStorage.setItem('sgce_role', 'consulta');
+    sessionStorage.setItem('sgce_user', 'Consulta');
+    enterApp();
+}
+
+function enterApp() {
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('appContainer').style.display = '';
+    applyRoleRestrictions();
+    renderCurrentTab();
+}
+
+function logout() {
+    currentUserRole = null;
+    sessionStorage.removeItem('sgce_role');
+    sessionStorage.removeItem('sgce_user');
+    document.getElementById('loginOverlay').style.display = '';
+    document.getElementById('appContainer').style.display = 'none';
+    hideLoginForm();
+    document.getElementById('loginUser').value = '';
+    document.getElementById('loginPass').value = '';
+}
+
+function isAdmin() {
+    return currentUserRole === 'admin';
+}
+
+function applyRoleRestrictions() {
+    const navItems = document.querySelectorAll('.nav-item');
+    const consultaTabs = ['rcs', 'entregas', 'sinalizacao'];
+    const consultaBanner = document.getElementById('consultaBanner');
+
+    if (currentUserRole === 'consulta') {
+        // Hide admin-only nav items, show only consulta tabs
+        navItems.forEach(el => {
+            const tab = el.dataset.tab;
+            el.style.display = consultaTabs.includes(tab) ? '' : 'none';
+        });
+        // Show consultation banner
+        if (consultaBanner) consultaBanner.style.display = '';
+        // Hide sidebar backup section
+        const sidebarBackup = document.querySelector('.sidebar-backup');
+        if (sidebarBackup) sidebarBackup.style.display = 'none';
+        // Navigate to RCs by default
+        navigate('rcs');
+    } else {
+        // Show all nav items including sinalizacao for admin
+        navItems.forEach(el => { el.style.display = ''; });
+        // Hide consultation banner
+        if (consultaBanner) consultaBanner.style.display = 'none';
+        // Show sidebar backup
+        const sidebarBackup = document.querySelector('.sidebar-backup');
+        if (sidebarBackup) sidebarBackup.style.display = '';
+    }
+}
+
 // ========== DOM HELPERS ==========
 const $ = sel => document.querySelector(sel);
 const $$ = sel => document.querySelectorAll(sel);
@@ -140,7 +232,8 @@ function renderCurrentTab() {
         entregas: renderEntregas,
         pendencias: renderPendencias,
         email: renderEmailConfig,
-        sap: renderSAPConfig
+        sap: renderSAPConfig,
+        sinalizacao: renderSinalizacao
     };
     const titles = {
         dashboard: 'Dashboard',
@@ -151,7 +244,8 @@ function renderCurrentTab() {
         entregas: 'Controle de Entregas',
         pendencias: 'Pendências',
         email: 'Configuração de E-Mail',
-        sap: 'Integração SAP'
+        sap: 'Integração SAP',
+        sinalizacao: 'Sinalizar Necessidade'
     };
     const tab = currentTab;
     $('#headerTitle').textContent = titles[tab] || '';
@@ -1696,15 +1790,15 @@ function renderRCs() {
             <td>${fmtDate(rc.dataPrevisao)}</td>
             <td>${badge(rc.status, rcStatusColor(rc.status))}</td>
             <td class="col-actions"><div class="actions">
-                ${rc.semRC ? `<button class="btn-icon" style="color:var(--neon)" onclick="inserirNumeroRC('${rc.id}')" title="Inserir Nº RC"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : ''}
+                ${isAdmin() ? `${rc.semRC ? `<button class="btn-icon" style="color:var(--neon)" onclick="inserirNumeroRC('${rc.id}')" title="Inserir Nº RC"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : ''}
                 ${!rc.pedidoCompra ? `<button class="btn-icon" style="color:var(--info)" onclick="inserirPC('${rc.id}')" title="Inserir Nº Pedido de Compra"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg></button>` : ''}
                 <button class="btn-icon" style="color:var(--info)" onclick="gerarScriptSAP('${rc.id}')" title="Gerar Script SAP"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></button>
                 <button class="btn-icon" onclick="viewHistoricoRC('${rc.id}')" title="Histórico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></button>
                 ${(rc.emailsEnviados && rc.emailsEnviados.length > 0) ? `<button class="btn-icon" style="color:var(--cyan)" onclick="viewEmailsEnviados('${rc.id}')" title="E-mails enviados (${rc.emailsEnviados.length})"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg></button>` : ''}
-                <button class="btn-icon" onclick="duplicarRC('${rc.id}')" title="Duplicar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                <button class="btn-icon" onclick="duplicarRC('${rc.id}')" title="Duplicar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>` : ''}
                 <button class="btn-icon" onclick="printRC('${rc.id}')" title="Imprimir extrato"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
-                <button class="btn-icon" onclick="editRC('${rc.id}')" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-                <button class="btn-icon danger" onclick="deleteRC('${rc.id}','${escHtml(rc.numero)}')" title="Excluir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                ${isAdmin() ? `<button class="btn-icon" onclick="editRC('${rc.id}')" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                <button class="btn-icon danger" onclick="deleteRC('${rc.id}','${escHtml(rc.numero)}')" title="Excluir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>` : ''}
             </div></td>
         </tr>`;
     });
@@ -1714,10 +1808,10 @@ function renderRCs() {
             <h2>Requisições de Compra</h2>
             <div class="page-actions">
                 ${searchHtml}
-                <button class="btn btn-secondary" onclick="exportCSV('rcs')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
+                ${isAdmin() ? `<button class="btn btn-secondary" onclick="exportCSV('rcs')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
                 <button class="btn btn-secondary" onclick="openRelatorioMensal()" style="font-size:12px">📊 Mensal</button>
                 <button class="btn btn-secondary" onclick="printRelatorioRCs()" style="font-size:12px">🖨️ Relatório</button>
-                <button class="btn btn-primary" onclick="editRC()">+ Nova RC</button>
+                <button class="btn btn-primary" onclick="editRC()">+ Nova RC</button>` : ''}
             </div>
         </div>
         ${filterBarHtml}
@@ -2501,10 +2595,10 @@ function renderEntregas() {
             <td>${(e.status === 'Recebida' || e.status === 'Parcial') && e.dataRecebimento ? fmtDate(e.dataRecebimento) : '—'}</td>
             <td>${badge(e.status, entregaStatusColor(e.status))}${e.entregaParcialOrigem ? ' <span style="font-size:10px;color:var(--info)">(saldo)</span>' : ''}</td>
             <td class="col-actions"><div class="actions">
-                ${confirmBtn}
-                ${fotoBtn}
-                <button class="btn-icon" onclick="editEntrega('${e.id}')" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-                <button class="btn-icon danger" onclick="deleteEntrega('${e.id}','NF ${escHtml(e.notaFiscal || e.id)}')" title="Excluir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
+                ${isAdmin() ? confirmBtn : ''}
+                ${isAdmin() ? fotoBtn : ''}
+                ${isAdmin() ? `<button class="btn-icon" onclick="editEntrega('${e.id}')" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                <button class="btn-icon danger" onclick="deleteEntrega('${e.id}','NF ${escHtml(e.notaFiscal || e.id)}')" title="Excluir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>` : ''}
             </div></td>
         </tr>`;
     });
@@ -2516,10 +2610,10 @@ function renderEntregas() {
             <h2>Controle de Entregas</h2>
             <div class="page-actions">
                 ${searchHtml}
-                <button class="btn btn-secondary" onclick="exportCSV('entregas')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
+                ${isAdmin() ? `<button class="btn btn-secondary" onclick="exportCSV('entregas')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
                 <button class="btn btn-secondary" onclick="viewCalendarioEntregas()" style="font-size:12px">📅 Calendário</button>
                 ${temRotaEntrega ? '<button class="btn btn-secondary" onclick="printProgramacao()" style="border-color:var(--neon);color:var(--neon)">🖨️ Programação</button>' : ''}
-                <button class="btn btn-primary" onclick="editEntrega()">+ Nova Entrega</button>
+                <button class="btn btn-primary" onclick="editEntrega()">+ Nova Entrega</button>` : ''}
             </div>
         </div>
         ${renderTable(['RC', 'PC', 'Fornecedor', 'Material', 'Qtd', 'NF', 'Local Entrega', 'Data Solicitação', 'Previsão Entrega', 'Dt Recebimento', 'Status', ''], rows, 'Nenhuma entrega cadastrada')}
@@ -3005,11 +3099,16 @@ function pendenciaCriticidadeColor(c) {
     return { 'Baixa': 'gray', 'Média': 'blue', 'Alta': 'orange', 'Urgente': 'red' }[c] || 'gray';
 }
 
+let pendenciasHideFinalizadas = true;
+
 function renderPendencias() {
     const data = DB.get('pendencias');
     const searchHtml = `<div class="search-box">${searchIcon}<input class="search-input" placeholder="Buscar pendência..." oninput="filterPendencias(this.value)"></div>`;
 
-    const rows = data.map(p => {
+    const finalizadas = ['Resolvida', 'Cancelada'];
+    const filteredData = pendenciasHideFinalizadas ? data.filter(p => !finalizadas.includes(p.status)) : data;
+
+    const rows = filteredData.map(p => {
         const canFinalize = (p.status === 'Aberta' || p.status === 'Em Andamento');
         const canReopen = (p.status === 'Resolvida' || p.status === 'Cancelada');
         let extraBtns = '';
@@ -3034,12 +3133,17 @@ function renderPendencias() {
     });
 
     const abertas = data.filter(p => p.status === 'Aberta' || p.status === 'Em Andamento').length;
+    const totalFinalizadas = data.filter(p => finalizadas.includes(p.status)).length;
 
     $('#content').innerHTML = `
         <div class="page-header">
             <h2>Pendências</h2>
             <div class="page-actions">
                 ${searchHtml}
+                ${totalFinalizadas > 0 ? `<button class="filter-toggle ${pendenciasHideFinalizadas ? 'active' : ''}" onclick="togglePendenciasFilter()">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1h22l-9.2 10.8V20l-3.6 2V11.8z"/></svg>
+                    ${pendenciasHideFinalizadas ? 'Finalizadas ocultas (' + totalFinalizadas + ')' : 'Mostrar todas'}
+                </button>` : ''}
                 ${abertas > 0 ? `<span style="font-size:12px;color:var(--warning);margin-right:8px">${abertas} aberta${abertas > 1 ? 's' : ''}</span>` : ''}
                 <button class="btn btn-secondary" onclick="exportCSV('pendencias')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
                 <button class="btn btn-secondary" onclick="printRelatorioPendencias()" style="font-size:12px">🖨️ Relatório</button>
@@ -3048,6 +3152,11 @@ function renderPendencias() {
         </div>
         ${renderTable(['Assunto', 'Criticidade', 'Status', 'Envolvidos', 'Prazo', 'Criado em', ''], rows, 'Nenhuma pendência cadastrada')}
     `;
+}
+
+function togglePendenciasFilter() {
+    pendenciasHideFinalizadas = !pendenciasHideFinalizadas;
+    renderPendencias();
 }
 
 function filterPendencias(q) {
@@ -4431,7 +4540,7 @@ function gerarScriptSAP(rcId) {
 // BACKUP — EXPORT / IMPORT
 // ========================================================================
 function exportBackup() {
-    const keys = ['materiais', 'fornecedores', 'contratos', 'rcs', 'entregas', 'pendencias'];
+    const keys = ['materiais', 'fornecedores', 'contratos', 'rcs', 'entregas', 'pendencias', 'sinalizacoes'];
     const backup = {};
     keys.forEach(key => {
         backup[key] = DB.get(key);
@@ -4523,7 +4632,7 @@ function confirmImport() {
     const backup = window._pendingImport;
     if (!backup) { toast('Nenhum backup pendente', 'error'); return; }
 
-    const keys = ['materiais', 'fornecedores', 'contratos', 'rcs', 'entregas', 'pendencias'];
+    const keys = ['materiais', 'fornecedores', 'contratos', 'rcs', 'entregas', 'pendencias', 'sinalizacoes'];
     keys.forEach(key => {
         if (Array.isArray(backup[key])) {
             DB.set(key, backup[key]);
@@ -5293,14 +5402,153 @@ function setupBeforeUnload() {
 
 
 // ========================================================================
+// SINALIZAÇÃO DE NECESSIDADE (Consultation Mode)
+// ========================================================================
+function renderSinalizacao() {
+    const materiais = DB.get('materiais');
+    const sinalizacoes = DB.get('sinalizacoes') || [];
+
+    const matOptions = materiais.map(m =>
+        `<option value="${m.id}">${escHtml(m.nome)} (${escHtml(m.codigo)})</option>`
+    ).join('');
+
+    // Show existing signals
+    const cards = sinalizacoes.slice().reverse().map(s => {
+        const mat = materiais.find(m => m.id === s.materialId);
+        const statusColor = s.status === 'Pendente' ? 'var(--warning)' : s.status === 'Atendida' ? 'var(--neon)' : 'var(--text-muted)';
+        return `<div class="signal-card">
+            <div class="signal-header">
+                <strong>${mat ? escHtml(mat.nome) : 'Material removido'}</strong>
+                <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${statusColor}20;color:${statusColor}">${escHtml(s.status)}</span>
+            </div>
+            ${s.quantidade ? `<div class="signal-body">Quantidade: <strong>${num(s.quantidade)} ${mat ? escHtml(mat.unidade || 'UN') : ''}</strong></div>` : ''}
+            ${s.observacao ? `<div class="signal-body">${escHtml(s.observacao)}</div>` : ''}
+            <div class="signal-meta">Solicitado por <strong>${escHtml(s.solicitante || 'Anônimo')}</strong> em ${fmtDate(s.data)}${s.status !== 'Pendente' && isAdmin() ? ` · <a href="#" onclick="event.preventDefault();mudarStatusSinalizacao('${s.id}','Pendente')">Reabrir</a>` : ''}</div>
+            ${isAdmin() && s.status === 'Pendente' ? `<div style="margin-top:8px;display:flex;gap:6px">
+                <button class="btn btn-primary" style="font-size:11px;padding:4px 12px" onclick="atenderSinalizacao('${s.id}')">✓ Atender</button>
+                <button class="btn btn-secondary" style="font-size:11px;padding:4px 12px" onclick="mudarStatusSinalizacao('${s.id}','Ignorada')">Ignorar</button>
+            </div>` : ''}
+        </div>`;
+    }).join('');
+
+    const pendentes = sinalizacoes.filter(s => s.status === 'Pendente').length;
+
+    $('#content').innerHTML = `
+        <div class="page-header">
+            <h2>Sinalizar Necessidade</h2>
+            ${pendentes > 0 ? `<span style="font-size:12px;color:var(--warning)">${pendentes} pendente${pendentes > 1 ? 's' : ''}</span>` : ''}
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:20px">
+            <h3 style="margin:0 0 12px;font-size:15px;color:var(--text)">Nova Sinalização</h3>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Material <span class="required">*</span></label>
+                    <select class="form-control" id="fSigMaterial">
+                        <option value="">Selecione o material...</option>
+                        ${matOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Quantidade (estimada)</label>
+                    <input class="form-control" id="fSigQtd" type="number" placeholder="Ex: 1000">
+                </div>
+                <div class="form-group">
+                    <label>Seu nome</label>
+                    <input class="form-control" id="fSigNome" placeholder="Ex: João da Silva" value="${escHtml(sessionStorage.getItem('sgce_sig_nome') || '')}">
+                </div>
+                <div class="form-group full">
+                    <label>Observação</label>
+                    <input class="form-control" id="fSigObs" placeholder="Urgência, destino, justificativa...">
+                </div>
+                <div class="form-group full">
+                    <button class="btn btn-primary" onclick="enviarSinalizacao()">Enviar Sinalização</button>
+                </div>
+            </div>
+        </div>
+        <h3 style="font-size:14px;color:var(--text-secondary);margin-bottom:12px">Sinalizações Recentes</h3>
+        ${cards || '<p style="color:var(--text-muted);font-size:13px">Nenhuma sinalização registrada ainda.</p>'}
+    `;
+}
+
+function enviarSinalizacao() {
+    const materialId = $('#fSigMaterial')?.value;
+    const quantidade = parseFloat($('#fSigQtd')?.value) || 0;
+    const nome = $('#fSigNome')?.value?.trim() || 'Anônimo';
+    const obs = $('#fSigObs')?.value?.trim() || '';
+
+    if (!materialId) { toast('Selecione um material', 'error'); return; }
+
+    // Save name for next time
+    sessionStorage.setItem('sgce_sig_nome', nome);
+
+    const sinalizacoes = DB.get('sinalizacoes') || [];
+    const sig = {
+        id: DB.id(),
+        materialId,
+        quantidade,
+        solicitante: nome,
+        observacao: obs,
+        data: new Date().toISOString().split('T')[0],
+        status: 'Pendente'
+    };
+    sinalizacoes.push(sig);
+    DB.set('sinalizacoes', sinalizacoes);
+
+    // Also create a pendência for admin
+    const mat = DB.get('materiais').find(m => m.id === materialId);
+    const pendencias = DB.get('pendencias');
+    pendencias.push({
+        id: DB.id(),
+        assunto: `Sinalização: ${mat ? mat.nome : 'Material'} — ${nome}`,
+        descricao: `Quantidade estimada: ${quantidade || 'Não informada'}\nSolicitante: ${nome}${obs ? '\nObservação: ' + obs : ''}`,
+        criticidade: 'Média',
+        status: 'Aberta',
+        categoria: 'Material',
+        envolvidos: nome,
+        dataCriacao: new Date().toISOString().split('T')[0],
+        prazo: '',
+        sinalizacaoId: sig.id
+    });
+    DB.set('pendencias', pendencias);
+
+    toast('Sinalização enviada com sucesso!');
+    renderSinalizacao();
+}
+
+function atenderSinalizacao(id) {
+    mudarStatusSinalizacao(id, 'Atendida');
+}
+
+function mudarStatusSinalizacao(id, novoStatus) {
+    const sinalizacoes = DB.get('sinalizacoes') || [];
+    const sig = sinalizacoes.find(s => s.id === id);
+    if (sig) {
+        sig.status = novoStatus;
+        DB.set('sinalizacoes', sinalizacoes);
+        toast(`Sinalização marcada como ${novoStatus}`);
+        renderCurrentTab();
+    }
+}
+
+// ========================================================================
 // INIT
 // ========================================================================
 document.addEventListener('DOMContentLoaded', () => {
     migrateContratos();
     initTheme();
-    renderCurrentTab();
     initFirebaseSync();
     setupBeforeUnload();
+
+    // Check for existing session
+    const savedRole = sessionStorage.getItem('sgce_role');
+    if (savedRole) {
+        currentUserRole = savedRole;
+        enterApp();
+    } else {
+        // Show login screen, hide app
+        document.getElementById('loginOverlay').style.display = '';
+        document.getElementById('appContainer').style.display = 'none';
+    }
 
     // Keyboard shortcuts
     document.addEventListener('keydown', e => {
