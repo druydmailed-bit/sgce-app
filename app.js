@@ -293,6 +293,10 @@ function fmt(v) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
 }
 
+function num(v) {
+    return Number(v || 0).toLocaleString('pt-BR');
+}
+
 function fmtDate(d) {
     if (!d) return '—';
     return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR');
@@ -5421,7 +5425,7 @@ function renderSinalizacao() {
                 <strong>${mat ? escHtml(mat.nome) : 'Material removido'}</strong>
                 <span style="font-size:11px;padding:2px 8px;border-radius:4px;background:${statusColor}20;color:${statusColor}">${escHtml(s.status)}</span>
             </div>
-            ${s.quantidade ? `<div class="signal-body">Quantidade: <strong>${num(s.quantidade)} ${mat ? escHtml(mat.unidade || 'UN') : ''}</strong></div>` : ''}
+            ${s.quantidade ? `<div class="signal-body">Quantidade: <strong>${Number(s.quantidade).toLocaleString('pt-BR')} ${mat ? escHtml(mat.unidade || 'UN') : ''}</strong></div>` : ''}
             ${s.observacao ? `<div class="signal-body">${escHtml(s.observacao)}</div>` : ''}
             <div class="signal-meta">Solicitado por <strong>${escHtml(s.solicitante || 'Anônimo')}</strong> em ${fmtDate(s.data)}${s.status !== 'Pendente' && isAdmin() ? ` · <a href="#" onclick="event.preventDefault();mudarStatusSinalizacao('${s.id}','Pendente')">Reabrir</a>` : ''}</div>
             ${isAdmin() && s.status === 'Pendente' ? `<div style="margin-top:8px;display:flex;gap:6px">
