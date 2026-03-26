@@ -2,12 +2,113 @@
 // SGCE - Sistema de Gestão de Contratos e Entregas
 // ========================================================================
 
-// ========== DATA STORE ==========
+// ========== DATA STORE (Firebase + localStorage cache) ==========
 const DB = {
-    get(key) { return JSON.parse(localStorage.getItem('gp_' + key) || '[]'); },
-    set(key, data) { localStorage.setItem('gp_' + key, JSON.stringify(data)); },
+    _cache: {},
+    get(key) {
+        if (DB._cache[key] !== undefined) return DB._cache[key];
+        const local = localStorage.getItem('gp_' + key);
+        const nonArrayKeys = ['sapConfig','quickNotes','quicknotes','emailConfig','theme','activitylog','rc_templates'];
+        const parsed = local ? JSON.parse(local) : (nonArrayKeys.includes(key) ? null : []);
+        DB._cache[key] = parsed;
+        return parsed;
+    },
+    set(key, data) {
+        DB._cache[key] = data;
+        localStorage.setItem('gp_' + key, JSON.stringify(data));
+        // Sync to Firebase
+        if (window.firebaseDB) {
+            window.firebaseDB.ref('gp_' + key).set(data).catch(e => console.warn('Firebase write error:', e));
+        }
+    },
     id() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
 };
+
+// ========== FIREBASE REAL-TIME SYNC ==========
+const SYNC_KEYS = ['materiais','fornecedores','contratos','rcs','entregas','pendencias','sapConfig','quickNotes','emailConfig','templates_rc'];
+let _firebaseReady = false;
+let _syncStatusEl = null;
+
+function initFirebaseSync() {
+    if (!window.firebaseDB) {
+        console.warn('Firebase not available, using localStorage only');
+        updateSyncStatus('offline');
+        return;
+    }
+
+    // First: upload any existing localStorage data that Firebase doesn't have yet
+    const rootRef = window.firebaseDB.ref();
+    rootRef.once('value').then(snap => {
+        const serverData = snap.val() || {};
+        const uploads = {};
+
+        SYNC_KEYS.forEach(key => {
+            const fbKey = 'gp_' + key;
+            const local = localStorage.getItem(fbKey);
+            if (local && !serverData[fbKey]) {
+                // Local has data but server doesn't - upload it
+                uploads[fbKey] = JSON.parse(local);
+            } else if (serverData[fbKey] !== undefined && serverData[fbKey] !== null) {
+                // Server has data - use it (server wins)
+                localStorage.setItem(fbKey, JSON.stringify(serverData[fbKey]));
+                DB._cache[key] = serverData[fbKey];
+            }
+        });
+
+        // Upload local-only data
+        if (Object.keys(uploads).length > 0) {
+            rootRef.update(uploads).then(() => {
+                console.log('Local data uploaded to Firebase');
+            });
+        }
+
+        // Re-render after sync
+        renderCurrentTab();
+
+        // Now set up real-time listeners
+        SYNC_KEYS.forEach(key => {
+            const fbKey = 'gp_' + key;
+            window.firebaseDB.ref(fbKey).on('value', snap => {
+                const val = snap.val();
+                if (val !== undefined && val !== null) {
+                    const currentLocal = localStorage.getItem(fbKey);
+                    const newData = JSON.stringify(val);
+                    if (currentLocal !== newData) {
+                        localStorage.setItem(fbKey, newData);
+                        DB._cache[key] = val;
+                        // Re-render if change came from another client
+                        renderCurrentTab();
+                    }
+                }
+            });
+        });
+
+        _firebaseReady = true;
+        updateSyncStatus('online');
+        console.log('Firebase sync active');
+    }).catch(err => {
+        console.error('Firebase sync error:', err);
+        updateSyncStatus('offline');
+    });
+
+    // Monitor connection state
+    window.firebaseDB.ref('.info/connected').on('value', snap => {
+        updateSyncStatus(snap.val() ? 'online' : 'offline');
+    });
+}
+
+function updateSyncStatus(status) {
+    if (!_syncStatusEl) {
+        _syncStatusEl = document.getElementById('syncStatus');
+    }
+    if (_syncStatusEl) {
+        const isOnline = status === 'online';
+        _syncStatusEl.innerHTML = isOnline
+            ? '<span style="color:#00ff41;font-size:11px">&#9679; Online</span>'
+            : '<span style="color:#ff4444;font-size:11px">&#9679; Offline</span>';
+        _syncStatusEl.title = isOnline ? 'Sincronizado em tempo real' : 'Sem conexão - dados salvos localmente';
+    }
+}
 
 // ========== DOM HELPERS ==========
 const $ = sel => document.querySelector(sel);
@@ -3856,13 +3957,13 @@ function viewFotoNF(entregaId) {
 // CONFIGURAÇÃO DE E-MAIL
 // ========================================================================
 function getEmailConfig() {
-    const stored = localStorage.getItem('gp_emailConfig');
-    if (stored) return JSON.parse(stored);
+    const stored = DB.get('emailConfig');
+    if (stored) return stored;
     return { ccEmails: [], corpoEmail: 'Prezados,\n\nSegue em anexo a solicitação de compra conforme requisição referenciada no assunto.\n\nFicamos à disposição para quaisquer esclarecimentos.\n\nAtenciosamente,' };
 }
 
 function saveEmailConfig(config) {
-    localStorage.setItem('gp_emailConfig', JSON.stringify(config));
+    DB.set('emailConfig', config);
 }
 
 function renderEmailConfig() {
@@ -4108,8 +4209,8 @@ MsgBox "Dados da RC {NUMERO_RC} carregados!" & vbCrLf & vbCrLf & _
        "Contrato: {CONTRATO_NUMERO}", vbInformation, "SGCE - Script SAP"`;
 
 function getSAPConfig() {
-    const stored = localStorage.getItem('gp_sapConfig');
-    if (stored) return JSON.parse(stored);
+    const stored = DB.get('sapConfig');
+    if (stored) return stored;
     return {
         sistema: '',
         cliente: '300',
@@ -4120,7 +4221,7 @@ function getSAPConfig() {
 }
 
 function saveSAPConfig(config) {
-    localStorage.setItem('gp_sapConfig', JSON.stringify(config));
+    DB.set('sapConfig', config);
     toast('Configurações SAP salvas!');
 }
 
@@ -4345,8 +4446,8 @@ function exportBackup() {
     };
     backup.emailConfig = getEmailConfig();
     backup.quickNotes = getQuickNotes();
-    backup.activityLog = JSON.parse(localStorage.getItem('gp_activitylog') || '[]');
-    backup.rcTemplates = JSON.parse(localStorage.getItem('gp_rc_templates') || '[]');
+    backup.activityLog = DB.get('activitylog') || [];
+    backup.rcTemplates = DB.get('rc_templates') || [];
     backup.sapConfig = getSAPConfig();
 
     const json = JSON.stringify(backup, null, 2);
@@ -4441,17 +4542,17 @@ function confirmImport() {
 
     // Restore activity log if present
     if (Array.isArray(backup.activityLog)) {
-        localStorage.setItem('gp_activitylog', JSON.stringify(backup.activityLog));
+        DB.set('activitylog', backup.activityLog);
     }
 
     // Restore RC templates if present
     if (Array.isArray(backup.rcTemplates)) {
-        localStorage.setItem('gp_rc_templates', JSON.stringify(backup.rcTemplates));
+        DB.set('rc_templates', backup.rcTemplates);
     }
 
     // Restore SAP config if present
     if (backup.sapConfig) {
-        localStorage.setItem('gp_sapConfig', JSON.stringify(backup.sapConfig));
+        DB.set('sapConfig', backup.sapConfig);
     }
 
     // Restore theme setting if present
@@ -4536,11 +4637,11 @@ function parseBRDate(str) {
 // NOTAS RÁPIDAS
 // ========================================================================
 function getQuickNotes() {
-    return localStorage.getItem('gp_quicknotes') || '';
+    return DB.get('quicknotes') || '';
 }
 
 function saveQuickNotes(text) {
-    localStorage.setItem('gp_quicknotes', text);
+    DB.set('quicknotes', text);
 }
 
 
@@ -4816,14 +4917,14 @@ function imprimirTodasDivisoes() {
 // ACTIVITY LOG
 // ========================================================================
 function logActivity(action, entity, detail) {
-    const log = JSON.parse(localStorage.getItem('gp_activitylog') || '[]');
+    const log = DB.get('activitylog') || [];
     log.unshift({ date: new Date().toISOString(), action, entity, detail: detail || '' });
     if (log.length > 200) log.length = 200;
-    localStorage.setItem('gp_activitylog', JSON.stringify(log));
+    DB.set('activitylog', log);
 }
 
 function viewActivityLog() {
-    const log = JSON.parse(localStorage.getItem('gp_activitylog') || '[]');
+    const log = DB.get('activitylog') || [];
     const items = log.slice(0, 50);
     const actionIcon = { criou: '+', editou: '✎', excluiu: '✕' };
     const actionColor = { criou: 'var(--neon)', editou: 'var(--info)', excluiu: 'var(--danger)' };
@@ -4852,11 +4953,11 @@ function viewActivityLog() {
 // RC TEMPLATES
 // ========================================================================
 function getTemplatesRC() {
-    return JSON.parse(localStorage.getItem('gp_rc_templates') || '[]');
+    return DB.get('rc_templates') || [];
 }
 
 function saveTemplatesRC(templates) {
-    localStorage.setItem('gp_rc_templates', JSON.stringify(templates));
+    DB.set('rc_templates', templates);
 }
 
 function salvarComoTemplate() {
@@ -5198,6 +5299,7 @@ document.addEventListener('DOMContentLoaded', () => {
     migrateContratos();
     initTheme();
     renderCurrentTab();
+    initFirebaseSync();
     setupBeforeUnload();
 
     // Keyboard shortcuts
