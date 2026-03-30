@@ -1783,13 +1783,14 @@ function renderRCs() {
             const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
             const mat = materiais.find(m => m.id === rc.materialId);
             const entregas = DB.get('entregas').filter(e => e.rcId === rc.id);
+            const div = getDivisaoByLocal(rc.localEntrega);
 
             return `<div class="cl-row" onclick="this.classList.toggle('cl-row-open')" data-search="${escHtml((rc.numero + ' ' + (rc.pedidoCompra || '') + ' ' + (mat ? mat.nome : '') + ' ' + (forn ? forn.nome : '') + ' ' + (rc.localEntrega || '')).toLowerCase())}">
                 <div class="cl-row-main">
                     <div class="cl-row-fields">
                         <span class="cl-field cl-field-mat" data-label="Material">${mat ? escHtml(mat.nome) : '—'}</span>
                         <span class="cl-field cl-field-forn" data-label="Fornecedor">${forn ? escHtml(forn.nome) : '—'}</span>
-                        <span class="cl-field cl-field-local" data-label="Local">${escHtml(rc.localEntrega || '—')}</span>
+                        <span class="cl-field cl-field-local" data-label="Local">${escHtml(rc.localEntrega || '—')}${div ? `<span class="cl-sub">Dep ${div.deposito} · Centro ${div.centro}</span>` : ''}</span>
                         <span class="cl-field cl-field-pc" data-label="PC">${rc.pedidoCompra ? escHtml(rc.pedidoCompra) : '—'}</span>
                         <span class="cl-field cl-field-date" data-label="Solicitação">${fmtDate(rc.data)}</span>
                         <span class="cl-field cl-field-date" data-label="Previsão">${fmtDate(rc.dataPrevisao)}</span>
@@ -2649,13 +2650,14 @@ function renderEntregas() {
             const contrato = rc ? contratos.find(c => c.id === rc.contratoId) : null;
             const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
             const localEnt = e.localEntrega || (rc ? rc.localEntrega : '') || '';
+            const div = getDivisaoByLocal(localEnt);
 
             return `<div class="cl-row" onclick="this.classList.toggle('cl-row-open')" data-search="${escHtml((e.notaFiscal + ' ' + (rc ? rc.numero : '') + ' ' + (mat ? mat.nome : '') + ' ' + (forn ? forn.nome : '') + ' ' + localEnt).toLowerCase())}">
                 <div class="cl-row-main">
                     <div class="cl-row-fields">
                         <span class="cl-field cl-field-mat" data-label="Material">${mat ? escHtml(mat.nome) : '—'}</span>
                         <span class="cl-field cl-field-forn" data-label="Fornecedor">${forn ? escHtml(forn.nome) : '—'}</span>
-                        <span class="cl-field cl-field-local" data-label="Local">${escHtml(localEnt || '—')}</span>
+                        <span class="cl-field cl-field-local" data-label="Local">${escHtml(localEnt || '—')}${div ? `<span class="cl-sub">Dep ${div.deposito} · Centro ${div.centro}</span>` : ''}</span>
                         <span class="cl-field cl-field-pc" data-label="PC">${rc && rc.pedidoCompra ? escHtml(rc.pedidoCompra) : '—'}</span>
                         <span class="cl-field cl-field-date" data-label="Solicitação">${fmtDate(e.data)}</span>
                         <span class="cl-field cl-field-date" data-label="Previsão">${fmtDate(e.dataPrevisao)}</span>
