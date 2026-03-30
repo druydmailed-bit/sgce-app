@@ -1778,25 +1778,35 @@ function renderRCs() {
 
     // Mobile card view for consulta mode
     if (!isAdmin()) {
-        const cards = filteredData.map(rc => {
+        const rows = filteredData.map(rc => {
             const contrato = contratos.find(c => c.id === rc.contratoId);
             const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
             const mat = materiais.find(m => m.id === rc.materialId);
+            const entregas = DB.get('entregas').filter(e => e.rcId === rc.id);
 
-            return `<div class="consulta-card" onclick="verDetalhesRC('${rc.id}')">
-                <div class="consulta-card-header">
-                    <span class="consulta-card-title">${escHtml(rc.numero)}${rc.pedidoCompra ? ' · PC ' + escHtml(rc.pedidoCompra) : ''}</span>
+            return `<div class="cl-row" onclick="this.classList.toggle('cl-row-open')" data-search="${escHtml((rc.numero + ' ' + (rc.pedidoCompra || '') + ' ' + (mat ? mat.nome : '') + ' ' + (forn ? forn.nome : '') + ' ' + (rc.localEntrega || '')).toLowerCase())}">
+                <div class="cl-row-main">
+                    <div class="cl-row-fields">
+                        <span class="cl-field cl-field-mat" data-label="Material">${mat ? escHtml(mat.nome) : '—'}</span>
+                        <span class="cl-field cl-field-forn" data-label="Fornecedor">${forn ? escHtml(forn.nome) : '—'}</span>
+                        <span class="cl-field cl-field-local" data-label="Local">${escHtml(rc.localEntrega || '—')}</span>
+                        <span class="cl-field cl-field-pc" data-label="PC">${rc.pedidoCompra ? escHtml(rc.pedidoCompra) : '—'}</span>
+                        <span class="cl-field cl-field-date" data-label="Solicitação">${fmtDate(rc.data)}</span>
+                        <span class="cl-field cl-field-date" data-label="Previsão">${fmtDate(rc.dataPrevisao)}</span>
+                    </div>
                     ${badge(rc.status, rcStatusColor(rc.status))}
+                    <svg class="cl-row-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
-                <div class="consulta-card-body">
-                    <div class="consulta-card-row"><span class="consulta-label">Contrato</span><span>${contrato ? escHtml(contrato.numero) : '—'}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Fornecedor</span><span>${forn ? escHtml(forn.nome) : '—'}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Material</span><span>${mat ? escHtml(mat.nome) : '—'}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Quantidade</span><span>${rc.quantidade || '—'} ${mat ? mat.unidade : ''}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Valor Unit.</span><span>${fmt(rc.valorUnitario)}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Local</span><span>${escHtml(rc.localEntrega || '—')}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Data</span><span>${fmtDate(rc.data)}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Previsão</span><span>${fmtDate(rc.dataPrevisao)}</span></div>
+                <div class="cl-row-detail">
+                    <div class="cl-detail-grid">
+                        <div><span class="cl-detail-label">N RC</span><span>${escHtml(rc.numero)}</span></div>
+                        <div><span class="cl-detail-label">Contrato</span><span>${contrato ? escHtml(contrato.numero) : '—'}</span></div>
+                        <div><span class="cl-detail-label">Quantidade</span><span>${rc.quantidade || '—'} ${mat ? mat.unidade : ''}</span></div>
+                        <div><span class="cl-detail-label">Valor Unit.</span><span>${fmt(rc.valorUnitario)}</span></div>
+                        <div><span class="cl-detail-label">Valor Total</span><span>${fmt((rc.quantidade || 0) * (rc.valorUnitario || 0))}</span></div>
+                        ${rc.observacao ? `<div class="cl-detail-full"><span class="cl-detail-label">Obs</span><span>${escHtml(rc.observacao)}</span></div>` : ''}
+                        ${entregas.length > 0 ? `<div class="cl-detail-full"><span class="cl-detail-label">Entregas</span><span>${entregas.map(e => fmtDate(e.data) + ' — NF ' + escHtml(e.notaFiscal || '?') + ' (' + badge(e.status, entregaStatusColor(e.status)) + ')').join('<br>')}</span></div>` : ''}
+                    </div>
                 </div>
             </div>`;
         }).join('');
@@ -1807,14 +1817,17 @@ function renderRCs() {
                 <div class="page-actions">${searchHtml}</div>
             </div>
             ${filterBarHtml}
-            <div class="consulta-cards" id="consultaCards">${cards || '<p style="color:var(--text-muted);text-align:center;padding:32px">Nenhuma RC cadastrada</p>'}</div>
+            <div class="cl-header-row">
+                <span>Material</span><span>Fornecedor</span><span>Local</span><span>PC</span><span>Solicitação</span><span>Previsão</span><span></span><span></span>
+            </div>
+            <div class="cl-rows">${rows || '<p style="color:var(--text-muted);text-align:center;padding:32px">Nenhuma RC cadastrada</p>'}</div>
         `;
         const searchInput = document.querySelector('.search-input');
         if (searchInput) {
             searchInput.oninput = function() {
                 const q = this.value.toLowerCase();
-                document.querySelectorAll('.consulta-card').forEach(card => {
-                    card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
+                document.querySelectorAll('.cl-row').forEach(row => {
+                    row.style.display = row.dataset.search.includes(q) ? '' : 'none';
                 });
             };
         }
@@ -2628,28 +2641,37 @@ function renderEntregas() {
     const totalRecebidas = data.filter(e => e.status === 'Recebida').length;
     const filteredData = entregasHideRecebidas ? data.filter(e => e.status !== 'Recebida') : data;
 
-    // Mobile card view for consulta mode
+    // Row-based view for consulta mode
     if (!isAdmin()) {
-        const cards = filteredData.map(e => {
+        const eRows = filteredData.map(e => {
             const rc = rcs.find(r => r.id === e.rcId);
             const mat = rc ? materiais.find(m => m.id === rc.materialId) : null;
             const contrato = rc ? contratos.find(c => c.id === rc.contratoId) : null;
             const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
             const localEnt = e.localEntrega || (rc ? rc.localEntrega : '') || '';
 
-            return `<div class="consulta-card" onclick="verDetalhesEntrega('${e.id}')">
-                <div class="consulta-card-header">
-                    <span class="consulta-card-title">${rc ? escHtml(rc.numero) : '—'}${rc && rc.pedidoCompra ? ' · PC ' + escHtml(rc.pedidoCompra) : ''}</span>
+            return `<div class="cl-row" onclick="this.classList.toggle('cl-row-open')" data-search="${escHtml((e.notaFiscal + ' ' + (rc ? rc.numero : '') + ' ' + (mat ? mat.nome : '') + ' ' + (forn ? forn.nome : '') + ' ' + localEnt).toLowerCase())}">
+                <div class="cl-row-main">
+                    <div class="cl-row-fields">
+                        <span class="cl-field cl-field-mat" data-label="Material">${mat ? escHtml(mat.nome) : '—'}</span>
+                        <span class="cl-field cl-field-forn" data-label="Fornecedor">${forn ? escHtml(forn.nome) : '—'}</span>
+                        <span class="cl-field cl-field-local" data-label="Local">${escHtml(localEnt || '—')}</span>
+                        <span class="cl-field cl-field-pc" data-label="PC">${rc && rc.pedidoCompra ? escHtml(rc.pedidoCompra) : '—'}</span>
+                        <span class="cl-field cl-field-date" data-label="Solicitação">${fmtDate(e.data)}</span>
+                        <span class="cl-field cl-field-date" data-label="Previsão">${fmtDate(e.dataPrevisao)}</span>
+                    </div>
                     ${badge(e.status, entregaStatusColor(e.status))}
+                    <svg class="cl-row-chevron" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
-                <div class="consulta-card-body">
-                    <div class="consulta-card-row"><span class="consulta-label">Fornecedor</span><span>${forn ? escHtml(forn.nome) : '—'}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Material</span><span>${mat ? escHtml(mat.nome) : '—'}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Quantidade</span><span>${e.quantidade || '—'} ${mat ? mat.unidade : ''}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">NF</span><span>${escHtml(e.notaFiscal || '—')}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Local</span><span>${escHtml(localEnt || '—')}</span></div>
-                    <div class="consulta-card-row"><span class="consulta-label">Previsão</span><span>${fmtDate(e.dataPrevisao)}</span></div>
-                    ${e.status === 'Recebida' && e.dataRecebimento ? `<div class="consulta-card-row"><span class="consulta-label">Recebido</span><span>${fmtDate(e.dataRecebimento)}</span></div>` : ''}
+                <div class="cl-row-detail">
+                    <div class="cl-detail-grid">
+                        <div><span class="cl-detail-label">Nº RC</span><span>${rc ? escHtml(rc.numero) : '—'}</span></div>
+                        <div><span class="cl-detail-label">Contrato</span><span>${contrato ? escHtml(contrato.numero) : '—'}</span></div>
+                        <div><span class="cl-detail-label">NF</span><span>${escHtml(e.notaFiscal || '—')}</span></div>
+                        <div><span class="cl-detail-label">Quantidade</span><span>${e.quantidade || '—'} ${mat ? mat.unidade : ''}</span></div>
+                        ${e.status === 'Recebida' && e.dataRecebimento ? `<div><span class="cl-detail-label">Dt Recebimento</span><span>${fmtDate(e.dataRecebimento)}</span></div>` : ''}
+                        ${e.observacao ? `<div class="cl-detail-full"><span class="cl-detail-label">Obs</span><span>${escHtml(e.observacao)}</span></div>` : ''}
+                    </div>
                 </div>
             </div>`;
         }).join('');
@@ -2665,15 +2687,17 @@ function renderEntregas() {
                     </button>` : ''}
                 </div>
             </div>
-            <div class="consulta-cards" id="consultaCards">${cards || '<p style="color:var(--text-muted);text-align:center;padding:32px">Nenhuma entrega cadastrada</p>'}</div>
+            <div class="cl-header-row">
+                <span>Material</span><span>Fornecedor</span><span>Local</span><span>PC</span><span>Solicitação</span><span>Previsão</span><span></span><span></span>
+            </div>
+            <div class="cl-rows">${eRows || '<p style="color:var(--text-muted);text-align:center;padding:32px">Nenhuma entrega cadastrada</p>'}</div>
         `;
-        // Search for cards
         const searchInput = document.querySelector('.search-input');
         if (searchInput) {
             searchInput.oninput = function() {
                 const q = this.value.toLowerCase();
-                document.querySelectorAll('.consulta-card').forEach(card => {
-                    card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
+                document.querySelectorAll('.cl-row').forEach(row => {
+                    row.style.display = row.dataset.search.includes(q) ? '' : 'none';
                 });
             };
         }

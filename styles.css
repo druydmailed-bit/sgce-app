@@ -1480,65 +1480,119 @@ textarea.form-control {
     background: rgba(59,130,246,0.15);
 }
 
-/* ========== CONSULTA MODE CARDS ========== */
-.consulta-cards {
+/* ========== CONSULTA MODE ROW LAYOUT ========== */
+.cl-header-row {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr 1fr 1fr 0.8fr 0.8fr 60px 24px;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+}
+.cl-rows {
     display: flex;
     flex-direction: column;
-    gap: 10px;
 }
-.consulta-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 14px 16px;
+.cl-row {
+    border-bottom: 1px solid var(--border);
     cursor: pointer;
-    transition: border-color 0.2s;
+    transition: background 0.15s;
 }
-.consulta-card:hover {
-    border-color: var(--neon);
+.cl-row:hover {
+    background: rgba(var(--neon-rgb), 0.03);
 }
-.consulta-card-header {
-    display: flex;
+.cl-row-main {
+    display: grid;
+    grid-template-columns: 1fr 60px 24px;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
+    padding: 10px 14px;
     gap: 8px;
 }
-.consulta-card-title {
-    font-weight: 700;
-    font-size: 14px;
-    color: var(--text);
+.cl-row-fields {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr 1fr 1fr 0.8fr 0.8fr;
+    gap: 8px;
+    min-width: 0;
+}
+.cl-field {
+    font-size: 12px;
+    color: var(--text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
-.consulta-card-body {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px 16px;
-    font-size: 12px;
+.cl-field-mat {
+    font-weight: 600;
+    color: var(--text);
 }
-.consulta-card-row {
+.cl-row-chevron {
+    color: var(--text-muted);
+    transition: transform 0.2s;
+    flex-shrink: 0;
+}
+.cl-row-open .cl-row-chevron {
+    transform: rotate(180deg);
+}
+.cl-row-detail {
+    display: none;
+    padding: 0 14px 14px;
+}
+.cl-row-open .cl-row-detail {
+    display: block;
+}
+.cl-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+    background: rgba(var(--neon-rgb), 0.03);
+    border-radius: 8px;
+    padding: 12px 14px;
+}
+.cl-detail-grid > div {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
 }
-.consulta-label {
+.cl-detail-label {
     font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-muted);
     font-weight: 600;
 }
-.consulta-card-row > span:last-child {
-    color: var(--text-secondary);
+.cl-detail-grid > div > span:last-child {
     font-size: 13px;
+    color: var(--text);
+}
+.cl-detail-full {
+    grid-column: 1 / -1;
 }
 
-@media (max-width: 480px) {
-    .consulta-card-body {
-        grid-template-columns: 1fr;
+/* Mobile: stack fields vertically */
+@media (max-width: 768px) {
+    .cl-header-row { display: none; }
+    .cl-row-main {
+        grid-template-columns: 1fr auto auto;
     }
+    .cl-row-fields {
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 12px;
+    }
+    .cl-field::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--text-muted);
+        font-weight: 600;
+    }
+    .cl-field { font-size: 12px; white-space: normal; }
+    .cl-field-mat { grid-column: 1 / -1; font-size: 13px; }
 }
 
 /* ========== SIGNALING PANEL ========== */
