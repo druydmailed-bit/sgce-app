@@ -1483,7 +1483,7 @@ textarea.form-control {
 /* ========== CONSULTA MODE ROW LAYOUT ========== */
 .cl-header-row {
     display: grid;
-    grid-template-columns: 2fr 1.5fr 1fr 1fr 0.8fr 0.8fr 60px 24px;
+    grid-template-columns: 2fr 1.5fr 1fr 1fr 0.7fr 0.8fr 0.8fr 60px 24px;
     gap: 8px;
     padding: 8px 14px;
     font-size: 10px;
@@ -1514,7 +1514,7 @@ textarea.form-control {
 }
 .cl-row-fields {
     display: grid;
-    grid-template-columns: 2fr 1.5fr 1fr 1fr 0.8fr 0.8fr;
+    grid-template-columns: 2fr 1.5fr 1fr 1fr 0.7fr 0.8fr 0.8fr;
     gap: 8px;
     min-width: 0;
 }

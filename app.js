@@ -1792,6 +1792,7 @@ function renderRCs() {
                         <span class="cl-field cl-field-forn" data-label="Fornecedor">${forn ? escHtml(forn.nome) : '—'}</span>
                         <span class="cl-field cl-field-local" data-label="Local">${escHtml(rc.localEntrega || '—')}${div ? `<span class="cl-sub">Dep ${div.deposito} · Centro ${div.centro}</span>` : ''}</span>
                         <span class="cl-field cl-field-pc" data-label="PC">${rc.pedidoCompra ? escHtml(rc.pedidoCompra) : '—'}</span>
+                        <span class="cl-field cl-field-qty" data-label="Qtd">${rc.quantidade || '—'} ${mat ? mat.unidade : ''}</span>
                         <span class="cl-field cl-field-date" data-label="Solicitação">${fmtDate(rc.data)}</span>
                         <span class="cl-field cl-field-date" data-label="Previsão">${fmtDate(rc.dataPrevisao)}</span>
                     </div>
@@ -1819,7 +1820,7 @@ function renderRCs() {
             </div>
             ${filterBarHtml}
             <div class="cl-header-row">
-                <span>Material</span><span>Fornecedor</span><span>Local</span><span>PC</span><span>Solicitação</span><span>Previsão</span><span></span><span></span>
+                <span>Material</span><span>Fornecedor</span><span>Local</span><span>PC</span><span>Qtd</span><span>Solicitação</span><span>Previsão</span><span></span><span></span>
             </div>
             <div class="cl-rows">${rows || '<p style="color:var(--text-muted);text-align:center;padding:32px">Nenhuma RC cadastrada</p>'}</div>
         `;
@@ -2639,8 +2640,9 @@ function renderEntregas() {
     const materiais = DB.get('materiais');
     const searchHtml = `<div class="search-box">${searchIcon}<input class="search-input" placeholder="Buscar entrega..." oninput="filterTable(this.value)"></div>`;
 
-    const totalRecebidas = data.filter(e => e.status === 'Recebida').length;
-    const filteredData = entregasHideRecebidas ? data.filter(e => e.status !== 'Recebida') : data;
+    const statusOcultos = ['Recebida', 'Parcial'];
+    const totalOcultas = data.filter(e => statusOcultos.includes(e.status)).length;
+    const filteredData = entregasHideRecebidas ? data.filter(e => !statusOcultos.includes(e.status)) : data;
 
     // Row-based view for consulta mode
     if (!isAdmin()) {
@@ -2659,6 +2661,7 @@ function renderEntregas() {
                         <span class="cl-field cl-field-forn" data-label="Fornecedor">${forn ? escHtml(forn.nome) : '—'}</span>
                         <span class="cl-field cl-field-local" data-label="Local">${escHtml(localEnt || '—')}${div ? `<span class="cl-sub">Dep ${div.deposito} · Centro ${div.centro}</span>` : ''}</span>
                         <span class="cl-field cl-field-pc" data-label="PC">${rc && rc.pedidoCompra ? escHtml(rc.pedidoCompra) : '—'}</span>
+                        <span class="cl-field cl-field-qty" data-label="Qtd">${e.quantidade || '—'} ${mat ? mat.unidade : ''}</span>
                         <span class="cl-field cl-field-date" data-label="Solicitação">${fmtDate(e.data)}</span>
                         <span class="cl-field cl-field-date" data-label="Previsão">${fmtDate(e.dataPrevisao)}</span>
                     </div>
@@ -2683,14 +2686,14 @@ function renderEntregas() {
                 <h2>Entregas</h2>
                 <div class="page-actions">
                     ${searchHtml}
-                    ${totalRecebidas > 0 ? `<button class="filter-toggle ${entregasHideRecebidas ? 'active' : ''}" onclick="toggleEntregasRecebidas()">
+                    ${totalOcultas > 0 ? `<button class="filter-toggle ${entregasHideRecebidas ? 'active' : ''}" onclick="toggleEntregasRecebidas()">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1h22l-9.2 10.8V20l-3.6 2V11.8z"/></svg>
-                        ${entregasHideRecebidas ? 'Recebidas ocultas (' + totalRecebidas + ')' : 'Ocultar recebidas'}
+                        ${entregasHideRecebidas ? 'Ocultas (' + totalOcultas + ')' : 'Mostrar todas'}
                     </button>` : ''}
                 </div>
             </div>
             <div class="cl-header-row">
-                <span>Material</span><span>Fornecedor</span><span>Local</span><span>PC</span><span>Solicitação</span><span>Previsão</span><span></span><span></span>
+                <span>Material</span><span>Fornecedor</span><span>Local</span><span>PC</span><span>Qtd</span><span>Solicitação</span><span>Previsão</span><span></span><span></span>
             </div>
             <div class="cl-rows">${eRows || '<p style="color:var(--text-muted);text-align:center;padding:32px">Nenhuma entrega cadastrada</p>'}</div>
         `;
@@ -2746,9 +2749,9 @@ function renderEntregas() {
             <h2>Controle de Entregas</h2>
             <div class="page-actions">
                 ${searchHtml}
-                ${totalRecebidas > 0 ? `<button class="filter-toggle ${entregasHideRecebidas ? 'active' : ''}" onclick="toggleEntregasRecebidas()">
+                ${totalOcultas > 0 ? `<button class="filter-toggle ${entregasHideRecebidas ? 'active' : ''}" onclick="toggleEntregasRecebidas()">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1h22l-9.2 10.8V20l-3.6 2V11.8z"/></svg>
-                    ${entregasHideRecebidas ? 'Recebidas ocultas (' + totalRecebidas + ')' : 'Ocultar recebidas'}
+                    ${entregasHideRecebidas ? 'Ocultas (' + totalOcultas + ')' : 'Mostrar todas'}
                 </button>` : ''}
                 ${isAdmin() ? `<button class="btn btn-secondary" onclick="exportCSV('entregas')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
                 <button class="btn btn-secondary" onclick="viewCalendarioEntregas()" style="font-size:12px">📅 Calendário</button>
