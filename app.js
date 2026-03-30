@@ -213,6 +213,7 @@ let dateFilterDe = '';
 let dateFilterAte = '';
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
+let entregasHideRecebidas = true;
 
 // ========== NAVIGATION ==========
 function navigate(tab) {
@@ -1775,6 +1776,51 @@ function renderRCs() {
     const filterBarHtml = `<div class="filter-pills">${statusFilters.map(s => `<button class="pill-btn ${rcStatusFilter === s ? 'pill-active' : ''}" onclick="setRcStatusFilter('${s}')">${s}</button>`).join('')}</div>`;
     const dateFilterHtml = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap"><label style="font-size:12px;color:var(--text-secondary)">Período:</label><input class="form-control" type="text" id="fDateDe" placeholder="De DD/MM/AAAA" maxlength="10" value="${dateToBR(dateFilterDe)}" style="width:130px;padding:6px 10px;font-size:12px" onchange="applyDateFilter()"><input class="form-control" type="text" id="fDateAte" placeholder="Até DD/MM/AAAA" maxlength="10" value="${dateToBR(dateFilterAte)}" style="width:130px;padding:6px 10px;font-size:12px" onchange="applyDateFilter()">${(dateFilterDe || dateFilterAte) ? `<button class="btn-icon" onclick="clearDateFilter()" title="Limpar filtro data"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>` : ''}</div>`;
 
+    // Mobile card view for consulta mode
+    if (!isAdmin()) {
+        const cards = filteredData.map(rc => {
+            const contrato = contratos.find(c => c.id === rc.contratoId);
+            const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
+            const mat = materiais.find(m => m.id === rc.materialId);
+
+            return `<div class="consulta-card" onclick="verDetalhesRC('${rc.id}')">
+                <div class="consulta-card-header">
+                    <span class="consulta-card-title">${escHtml(rc.numero)}${rc.pedidoCompra ? ' · PC ' + escHtml(rc.pedidoCompra) : ''}</span>
+                    ${badge(rc.status, rcStatusColor(rc.status))}
+                </div>
+                <div class="consulta-card-body">
+                    <div class="consulta-card-row"><span class="consulta-label">Contrato</span><span>${contrato ? escHtml(contrato.numero) : '—'}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Fornecedor</span><span>${forn ? escHtml(forn.nome) : '—'}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Material</span><span>${mat ? escHtml(mat.nome) : '—'}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Quantidade</span><span>${rc.quantidade || '—'} ${mat ? mat.unidade : ''}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Valor Unit.</span><span>${fmt(rc.valorUnitario)}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Local</span><span>${escHtml(rc.localEntrega || '—')}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Data</span><span>${fmtDate(rc.data)}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Previsão</span><span>${fmtDate(rc.dataPrevisao)}</span></div>
+                </div>
+            </div>`;
+        }).join('');
+
+        $('#content').innerHTML = `
+            <div class="page-header">
+                <h2>Requisições</h2>
+                <div class="page-actions">${searchHtml}</div>
+            </div>
+            ${filterBarHtml}
+            <div class="consulta-cards" id="consultaCards">${cards || '<p style="color:var(--text-muted);text-align:center;padding:32px">Nenhuma RC cadastrada</p>'}</div>
+        `;
+        const searchInput = document.querySelector('.search-input');
+        if (searchInput) {
+            searchInput.oninput = function() {
+                const q = this.value.toLowerCase();
+                document.querySelectorAll('.consulta-card').forEach(card => {
+                    card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
+                });
+            };
+        }
+        return;
+    }
+
     const rows = filteredData.map(rc => {
         const contrato = contratos.find(c => c.id === rc.contratoId);
         const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
@@ -2566,6 +2612,11 @@ function copyAsImage() {
 // ========================================================================
 // ENTREGAS
 // ========================================================================
+function toggleEntregasRecebidas() {
+    entregasHideRecebidas = !entregasHideRecebidas;
+    renderEntregas();
+}
+
 function renderEntregas() {
     const data = DB.get('entregas');
     const rcs = DB.get('rcs');
@@ -2574,7 +2625,62 @@ function renderEntregas() {
     const materiais = DB.get('materiais');
     const searchHtml = `<div class="search-box">${searchIcon}<input class="search-input" placeholder="Buscar entrega..." oninput="filterTable(this.value)"></div>`;
 
-    const rows = data.map(e => {
+    const totalRecebidas = data.filter(e => e.status === 'Recebida').length;
+    const filteredData = entregasHideRecebidas ? data.filter(e => e.status !== 'Recebida') : data;
+
+    // Mobile card view for consulta mode
+    if (!isAdmin()) {
+        const cards = filteredData.map(e => {
+            const rc = rcs.find(r => r.id === e.rcId);
+            const mat = rc ? materiais.find(m => m.id === rc.materialId) : null;
+            const contrato = rc ? contratos.find(c => c.id === rc.contratoId) : null;
+            const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
+            const localEnt = e.localEntrega || (rc ? rc.localEntrega : '') || '';
+
+            return `<div class="consulta-card" onclick="verDetalhesEntrega('${e.id}')">
+                <div class="consulta-card-header">
+                    <span class="consulta-card-title">${rc ? escHtml(rc.numero) : '—'}${rc && rc.pedidoCompra ? ' · PC ' + escHtml(rc.pedidoCompra) : ''}</span>
+                    ${badge(e.status, entregaStatusColor(e.status))}
+                </div>
+                <div class="consulta-card-body">
+                    <div class="consulta-card-row"><span class="consulta-label">Fornecedor</span><span>${forn ? escHtml(forn.nome) : '—'}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Material</span><span>${mat ? escHtml(mat.nome) : '—'}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Quantidade</span><span>${e.quantidade || '—'} ${mat ? mat.unidade : ''}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">NF</span><span>${escHtml(e.notaFiscal || '—')}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Local</span><span>${escHtml(localEnt || '—')}</span></div>
+                    <div class="consulta-card-row"><span class="consulta-label">Previsão</span><span>${fmtDate(e.dataPrevisao)}</span></div>
+                    ${e.status === 'Recebida' && e.dataRecebimento ? `<div class="consulta-card-row"><span class="consulta-label">Recebido</span><span>${fmtDate(e.dataRecebimento)}</span></div>` : ''}
+                </div>
+            </div>`;
+        }).join('');
+
+        $('#content').innerHTML = `
+            <div class="page-header">
+                <h2>Entregas</h2>
+                <div class="page-actions">
+                    ${searchHtml}
+                    ${totalRecebidas > 0 ? `<button class="filter-toggle ${entregasHideRecebidas ? 'active' : ''}" onclick="toggleEntregasRecebidas()">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1h22l-9.2 10.8V20l-3.6 2V11.8z"/></svg>
+                        ${entregasHideRecebidas ? 'Recebidas ocultas (' + totalRecebidas + ')' : 'Ocultar recebidas'}
+                    </button>` : ''}
+                </div>
+            </div>
+            <div class="consulta-cards" id="consultaCards">${cards || '<p style="color:var(--text-muted);text-align:center;padding:32px">Nenhuma entrega cadastrada</p>'}</div>
+        `;
+        // Search for cards
+        const searchInput = document.querySelector('.search-input');
+        if (searchInput) {
+            searchInput.oninput = function() {
+                const q = this.value.toLowerCase();
+                document.querySelectorAll('.consulta-card').forEach(card => {
+                    card.style.display = card.textContent.toLowerCase().includes(q) ? '' : 'none';
+                });
+            };
+        }
+        return;
+    }
+
+    const rows = filteredData.map(e => {
         const rc = rcs.find(r => r.id === e.rcId);
         const mat = rc ? materiais.find(m => m.id === rc.materialId) : null;
         const contrato = rc ? contratos.find(c => c.id === rc.contratoId) : null;
@@ -2614,6 +2720,10 @@ function renderEntregas() {
             <h2>Controle de Entregas</h2>
             <div class="page-actions">
                 ${searchHtml}
+                ${totalRecebidas > 0 ? `<button class="filter-toggle ${entregasHideRecebidas ? 'active' : ''}" onclick="toggleEntregasRecebidas()">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1h22l-9.2 10.8V20l-3.6 2V11.8z"/></svg>
+                    ${entregasHideRecebidas ? 'Recebidas ocultas (' + totalRecebidas + ')' : 'Ocultar recebidas'}
+                </button>` : ''}
                 ${isAdmin() ? `<button class="btn btn-secondary" onclick="exportCSV('entregas')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
                 <button class="btn btn-secondary" onclick="viewCalendarioEntregas()" style="font-size:12px">📅 Calendário</button>
                 ${temRotaEntrega ? '<button class="btn btn-secondary" onclick="printProgramacao()" style="border-color:var(--neon);color:var(--neon)">🖨️ Programação</button>' : ''}
