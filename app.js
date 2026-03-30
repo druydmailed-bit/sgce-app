@@ -175,7 +175,7 @@ function isAdmin() {
 
 function applyRoleRestrictions() {
     const navItems = document.querySelectorAll('.nav-item');
-    const consultaTabs = ['rcs', 'entregas', 'sinalizacao'];
+    const consultaTabs = ['entregas', 'sinalizacao'];
     const consultaBanner = document.getElementById('consultaBanner');
 
     if (currentUserRole === 'consulta') {
@@ -189,8 +189,8 @@ function applyRoleRestrictions() {
         // Hide sidebar backup section
         const sidebarBackup = document.querySelector('.sidebar-backup');
         if (sidebarBackup) sidebarBackup.style.display = 'none';
-        // Navigate to RCs by default
-        navigate('rcs');
+        // Navigate to Entregas by default
+        navigate('entregas');
     } else {
         // Show all nav items including sinalizacao for admin
         navItems.forEach(el => { el.style.display = ''; });
@@ -1841,6 +1841,7 @@ function renderRCs() {
         const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
         const mat = materiais.find(m => m.id === rc.materialId);
         const semRcBadge = rc.semRC ? ' <span class="badge badge-orange" style="font-size:9px;padding:2px 6px">SEM RC</span>' : '';
+        const rcDiv = getDivisaoByLocal(rc.localEntrega);
 
         return `<tr class="clickable-row" onclick="if(!event.target.closest('.actions'))verDetalhesRC('${rc.id}')" data-search="${escHtml((rc.numero + ' ' + (contrato ? contrato.numero : '') + ' ' + (forn ? forn.nome : '') + ' ' + (mat ? mat.nome : '') + ' ' + (rc.localEntrega || '')).toLowerCase())}">
             <td><strong>${escHtml(rc.numero)}</strong>${cpBtn(rc.numero)}${semRcBadge}</td>
@@ -1850,7 +1851,7 @@ function renderRCs() {
             <td>${mat ? escHtml(mat.nome) + cpBtn(mat.nome) : '—'}</td>
             <td>${rc.quantidade || '—'} ${mat ? mat.unidade : ''}</td>
             <td>${fmt(rc.valorUnitario)}</td>
-            <td>${escHtml(rc.localEntrega || '—')}</td>
+            <td>${escHtml(rc.localEntrega || '—')}${rcDiv ? `<br><span class="cl-sub">Dep ${rcDiv.deposito} · Centro ${rcDiv.centro}</span>` : ''}</td>
             <td>${fmtDate(rc.data)}</td>
             <td>${fmtDate(rc.dataPrevisao)}</td>
             <td>${badge(rc.status, rcStatusColor(rc.status))}</td>
@@ -2715,6 +2716,7 @@ function renderEntregas() {
         const contrato = rc ? contratos.find(c => c.id === rc.contratoId) : null;
         const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
         const localEnt = e.localEntrega || (rc ? rc.localEntrega : '') || '';
+        const entDiv = getDivisaoByLocal(localEnt);
 
         const confirmBtn = e.status === 'Rota de Entrega' ? `<button class="btn-icon" style="color:var(--neon)" onclick="confirmarEntrega('${e.id}')" title="Confirmar Entrega"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg></button>` : '';
             const fotoBtn = e.fotoNF
@@ -2728,7 +2730,7 @@ function renderEntregas() {
             <td>${mat ? escHtml(mat.nome) + cpBtn(mat.nome) : '—'}</td>
             <td>${e.quantidade || '—'} ${mat ? mat.unidade : ''}</td>
             <td>${escHtml(e.notaFiscal || '—')}</td>
-            <td>${escHtml(localEnt || '—')}</td>
+            <td>${escHtml(localEnt || '—')}${entDiv ? `<br><span class="cl-sub">Dep ${entDiv.deposito} · Centro ${entDiv.centro}</span>` : ''}</td>
             <td>${fmtDate(e.data)}</td>
             <td>${fmtDate(e.dataPrevisao)}</td>
             <td>${(e.status === 'Recebida' || e.status === 'Parcial') && e.dataRecebimento ? fmtDate(e.dataRecebimento) : '—'}</td>
