@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SGCE - Sistema de Gestão de Contratos e Entregas</title>
-    <link rel="stylesheet" href="styles.css?v=5">
+    <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
     <!-- Login Screen -->
@@ -18,28 +18,47 @@
                 <h1>SGCE</h1>
                 <p>Sistema de Gestão de Contratos e Entregas</p>
             </div>
-            <div class="login-buttons">
-                <button class="btn-login admin" onclick="showLoginForm()">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                    Entrar como Administrador
-                </button>
-                <button class="btn-login consulta" onclick="loginConsulta()">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-                    Modo Consulta
-                </button>
+            <!-- Step 1: Company selector -->
+            <div id="companySelector">
+                <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;font-weight:600">Selecione a empresa</p>
+                <div class="company-cards">
+                    <button class="company-card" onclick="selectCompany('msf')">
+                        <span class="company-icon" style="background:rgba(0,255,65,0.1);color:#00ff41">MF</span>
+                        <span class="company-name">MS Florestal</span>
+                    </button>
+                    <button class="company-card" onclick="selectCompany('bracell')">
+                        <span class="company-icon" style="background:rgba(59,130,246,0.1);color:#60a5fa">BM</span>
+                        <span class="company-name">Bracell MS</span>
+                    </button>
+                </div>
             </div>
-            <div class="login-form" id="loginForm" style="display:none">
-                <div class="form-group">
-                    <label>Usuário</label>
-                    <input class="form-control" id="loginUser" placeholder="Usuário" autocomplete="username">
+            <!-- Step 2: Login options (hidden until company selected) -->
+            <div id="loginStep2" style="display:none">
+                <div id="selectedCompanyBadge" style="text-align:center;margin-bottom:16px"></div>
+                <div class="login-buttons">
+                    <button class="btn-login admin" onclick="showLoginForm()">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        Entrar como Administrador
+                    </button>
+                    <button class="btn-login consulta" onclick="loginConsulta()">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        Modo Consulta
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label>Senha</label>
-                    <input class="form-control" id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+                <div class="login-form" id="loginForm" style="display:none">
+                    <div class="form-group">
+                        <label>Usuário</label>
+                        <input class="form-control" id="loginUser" placeholder="Usuário" autocomplete="username">
+                    </div>
+                    <div class="form-group">
+                        <label>Senha</label>
+                        <input class="form-control" id="loginPass" type="password" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+                    </div>
+                    <div id="loginError" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none"></div>
+                    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Entrar</button>
+                    <button class="btn btn-secondary" style="width:100%;margin-top:6px" onclick="hideLoginForm()">Voltar</button>
                 </div>
-                <div id="loginError" style="color:var(--danger);font-size:12px;margin-bottom:8px;display:none"></div>
-                <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Entrar</button>
-                <button class="btn btn-secondary" style="width:100%;margin-top:6px" onclick="hideLoginForm()">Voltar</button>
+                <button class="btn-back-company" onclick="backToCompanySelect()">← Trocar empresa</button>
             </div>
         </div>
     </div>
@@ -113,6 +132,10 @@
                 <input type="file" id="importFile" accept=".json" style="display:none" onchange="importBackup(event)">
             </div>
             <div class="sidebar-footer">
+                <button class="backup-btn" onclick="changePassword()" style="margin-bottom:6px;background:rgba(255,255,255,0.03);border-color:var(--border)">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                    <span>Trocar Senha</span>
+                </button>
                 <small>Elaborado por Lucas Marques</small>
             </div>
         </aside>
@@ -186,6 +209,6 @@
         });
         window.firebaseDB = firebase.database();
     </script>
-    <script src="app.js?v=8"></script>
+    <script src="app.js?v=9"></script>
 </body>
 </html>

@@ -2,25 +2,39 @@
 // SGCE - Sistema de Gestão de Contratos e Entregas
 // ========================================================================
 
+// ========== MULTI-COMPANY ==========
+const COMPANIES = {
+    msf: { id: 'msf', nome: 'MS Florestal', sigla: 'MF', cor: '#00ff41' },
+    bracell: { id: 'bracell', nome: 'Bracell MS', sigla: 'BM', cor: '#60a5fa' }
+};
+let currentCompany = null; // 'msf' or 'bracell'
+
+function getCompanyPrefix() {
+    return currentCompany ? currentCompany + '_' : '';
+}
+
 // ========== DATA STORE (Firebase + localStorage cache) ==========
 const DB = {
     _cache: {},
+    _fk(key) { return getCompanyPrefix() + 'gp_' + key; },
     get(key) {
-        if (DB._cache[key] !== undefined) return DB._cache[key];
-        const local = localStorage.getItem('gp_' + key);
+        const fk = DB._fk(key);
+        if (DB._cache[fk] !== undefined) return DB._cache[fk];
+        const local = localStorage.getItem(fk);
         const nonArrayKeys = ['sapConfig','quickNotes','quicknotes','emailConfig','theme','activitylog','rc_templates'];
         const parsed = local ? JSON.parse(local) : (nonArrayKeys.includes(key) ? null : []);
-        DB._cache[key] = parsed;
+        DB._cache[fk] = parsed;
         return parsed;
     },
     set(key, data) {
-        DB._cache[key] = data;
-        localStorage.setItem('gp_' + key, JSON.stringify(data));
-        // Sync to Firebase
+        const fk = DB._fk(key);
+        DB._cache[fk] = data;
+        localStorage.setItem(fk, JSON.stringify(data));
         if (window.firebaseDB) {
-            window.firebaseDB.ref('gp_' + key).set(data).catch(e => console.warn('Firebase write error:', e));
+            window.firebaseDB.ref(fk).set(data).catch(e => console.warn('Firebase write error:', e));
         }
     },
+    clearCache() { DB._cache = {}; },
     id() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
 };
 
@@ -28,73 +42,102 @@ const DB = {
 const SYNC_KEYS = ['materiais','fornecedores','contratos','rcs','entregas','pendencias','sinalizacoes','sapConfig','quickNotes','emailConfig','templates_rc'];
 let _firebaseReady = false;
 let _syncStatusEl = null;
+let _activeListeners = [];
 
 function initFirebaseSync() {
-    if (!window.firebaseDB) {
-        console.warn('Firebase not available, using localStorage only');
+    if (!window.firebaseDB || !currentCompany) {
+        if (!window.firebaseDB) console.warn('Firebase not available, using localStorage only');
         updateSyncStatus('offline');
         return;
     }
 
-    // First: upload any existing localStorage data that Firebase doesn't have yet
+    // Detach previous listeners
+    _activeListeners.forEach(ref => ref.off());
+    _activeListeners = [];
+
+    const prefix = getCompanyPrefix();
     const rootRef = window.firebaseDB.ref();
     rootRef.once('value').then(snap => {
         const serverData = snap.val() || {};
         const uploads = {};
 
         SYNC_KEYS.forEach(key => {
-            const fbKey = 'gp_' + key;
+            const fbKey = prefix + 'gp_' + key;
             const local = localStorage.getItem(fbKey);
             if (local && !serverData[fbKey]) {
-                // Local has data but server doesn't - upload it
                 uploads[fbKey] = JSON.parse(local);
             } else if (serverData[fbKey] !== undefined && serverData[fbKey] !== null) {
-                // Server has data - use it (server wins)
                 localStorage.setItem(fbKey, JSON.stringify(serverData[fbKey]));
-                DB._cache[key] = serverData[fbKey];
+                DB._cache[fbKey] = serverData[fbKey];
             }
         });
 
-        // Upload local-only data
         if (Object.keys(uploads).length > 0) {
-            rootRef.update(uploads).then(() => {
-                console.log('Local data uploaded to Firebase');
-            });
+            rootRef.update(uploads).then(() => console.log('Data uploaded for ' + currentCompany));
         }
 
-        // Re-render after sync
         renderCurrentTab();
 
-        // Now set up real-time listeners
         SYNC_KEYS.forEach(key => {
-            const fbKey = 'gp_' + key;
-            window.firebaseDB.ref(fbKey).on('value', snap => {
+            const fbKey = prefix + 'gp_' + key;
+            const ref = window.firebaseDB.ref(fbKey);
+            ref.on('value', snap => {
                 const val = snap.val();
                 if (val !== undefined && val !== null) {
                     const currentLocal = localStorage.getItem(fbKey);
                     const newData = JSON.stringify(val);
                     if (currentLocal !== newData) {
                         localStorage.setItem(fbKey, newData);
-                        DB._cache[key] = val;
-                        // Re-render if change came from another client
+                        DB._cache[fbKey] = val;
                         renderCurrentTab();
                     }
                 }
             });
+            _activeListeners.push(ref);
         });
 
         _firebaseReady = true;
         updateSyncStatus('online');
-        console.log('Firebase sync active');
+        console.log('Firebase sync active for ' + currentCompany);
     }).catch(err => {
         console.error('Firebase sync error:', err);
         updateSyncStatus('offline');
     });
 
-    // Monitor connection state
     window.firebaseDB.ref('.info/connected').on('value', snap => {
         updateSyncStatus(snap.val() ? 'online' : 'offline');
     });
+}
+
+// Migrate old non-prefixed data to msf_ prefix
+function migrateToCompanyData() {
+    if (localStorage.getItem('sgce_data_migrated')) return;
+    SYNC_KEYS.forEach(key => {
+        const oldKey = 'gp_' + key;
+        const newKey = 'msf_gp_' + key;
+        const old = localStorage.getItem(oldKey);
+        if (old && !localStorage.getItem(newKey)) {
+            localStorage.setItem(newKey, old);
+        }
+    });
+    if (window.firebaseDB) {
+        const rootRef = window.firebaseDB.ref();
+        rootRef.once('value').then(snap => {
+            const serverData = snap.val() || {};
+            const uploads = {};
+            SYNC_KEYS.forEach(key => {
+                const oldKey = 'gp_' + key;
+                const newKey = 'msf_gp_' + key;
+                if (serverData[oldKey] && !serverData[newKey]) {
+                    uploads[newKey] = serverData[oldKey];
+                }
+            });
+            if (Object.keys(uploads).length > 0) {
+                rootRef.update(uploads).then(() => console.log('Data migrated to msf_ prefix'));
+            }
+        });
+    }
+    localStorage.setItem('sgce_data_migrated', '1');
 }
 
 function updateSyncStatus(status) {
@@ -111,10 +154,42 @@ function updateSyncStatus(status) {
 }
 
 // ========== AUTH SYSTEM ==========
-const AUTH_USERS = [
-    { user: 'Lucas Marques', pass: '456456', role: 'admin' }
-];
-let currentUserRole = null; // 'admin' or 'consulta'
+const DEFAULT_USERS = {
+    msf: [
+        { user: 'Lucas Marques', pass: '456456', role: 'admin' }
+    ],
+    bracell: [
+        { user: 'Caline Mariele', pass: '1234', role: 'admin' },
+        { user: 'Lucas Marques', pass: '4321', role: 'admin' }
+    ]
+};
+let currentUserRole = null;
+let currentUserName = null;
+
+function getCompanyUsers() {
+    if (!currentCompany) return [];
+    const customPasswords = JSON.parse(localStorage.getItem('sgce_passwords_' + currentCompany) || '{}');
+    return DEFAULT_USERS[currentCompany].map(u => ({
+        ...u,
+        pass: customPasswords[u.user.toLowerCase()] || u.pass
+    }));
+}
+
+function selectCompany(companyId) {
+    currentCompany = companyId;
+    const comp = COMPANIES[companyId];
+    document.getElementById('companySelector').style.display = 'none';
+    document.getElementById('loginStep2').style.display = '';
+    document.getElementById('selectedCompanyBadge').innerHTML =
+        `<span style="display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:8px;background:${comp.cor}15;border:1px solid ${comp.cor}40;font-size:13px;font-weight:600;color:${comp.cor}">${comp.sigla} — ${comp.nome}</span>`;
+}
+
+function backToCompanySelect() {
+    currentCompany = null;
+    document.getElementById('companySelector').style.display = '';
+    document.getElementById('loginStep2').style.display = 'none';
+    hideLoginForm();
+}
 
 function showLoginForm() {
     document.getElementById('loginForm').style.display = 'block';
@@ -124,18 +199,26 @@ function showLoginForm() {
 
 function hideLoginForm() {
     document.getElementById('loginForm').style.display = 'none';
-    document.querySelector('.login-buttons').style.display = 'flex';
-    document.getElementById('loginError').style.display = 'none';
+    const btns = document.querySelector('.login-buttons');
+    if (btns) btns.style.display = 'flex';
+    const err = document.getElementById('loginError');
+    if (err) err.style.display = 'none';
 }
 
 function doLogin() {
     const user = document.getElementById('loginUser').value.trim();
     const pass = document.getElementById('loginPass').value;
-    const found = AUTH_USERS.find(u => u.user.toLowerCase() === user.toLowerCase() && u.pass === pass);
+    const users = getCompanyUsers();
+    const found = users.find(u => u.user.toLowerCase() === user.toLowerCase() && u.pass === pass);
     if (found) {
         currentUserRole = found.role;
+        currentUserName = found.user;
         sessionStorage.setItem('sgce_role', found.role);
         sessionStorage.setItem('sgce_user', found.user);
+        sessionStorage.setItem('sgce_company', currentCompany);
+        DB.clearCache();
+        migrateContratos();
+        initFirebaseSync();
         enterApp();
     } else {
         const errEl = document.getElementById('loginError');
@@ -146,31 +229,107 @@ function doLogin() {
 
 function loginConsulta() {
     currentUserRole = 'consulta';
+    currentUserName = 'Consulta';
     sessionStorage.setItem('sgce_role', 'consulta');
     sessionStorage.setItem('sgce_user', 'Consulta');
+    sessionStorage.setItem('sgce_company', currentCompany);
+    DB.clearCache();
+    migrateContratos();
+    initFirebaseSync();
     enterApp();
 }
 
 function enterApp() {
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('appContainer').style.display = '';
+    // Update sidebar with company name
+    const comp = COMPANIES[currentCompany];
+    if (comp) {
+        const logoSpan = document.querySelector('.sidebar-header .logo span');
+        if (logoSpan) logoSpan.textContent = 'SGCE — ' + comp.nome;
+    }
     applyRoleRestrictions();
     renderCurrentTab();
 }
 
 function logout() {
     currentUserRole = null;
+    currentUserName = null;
+    currentCompany = null;
+    DB.clearCache();
     sessionStorage.removeItem('sgce_role');
     sessionStorage.removeItem('sgce_user');
+    sessionStorage.removeItem('sgce_company');
     document.getElementById('loginOverlay').style.display = '';
     document.getElementById('appContainer').style.display = 'none';
-    hideLoginForm();
+    backToCompanySelect();
     document.getElementById('loginUser').value = '';
     document.getElementById('loginPass').value = '';
 }
 
 function isAdmin() {
     return currentUserRole === 'admin';
+}
+
+function changePassword() {
+    openModal('Alterar Senha', `
+        <div class="form-grid">
+            <div class="form-group full">
+                <label>Senha Atual</label>
+                <input class="form-control" type="password" id="fOldPass">
+            </div>
+            <div class="form-group full">
+                <label>Nova Senha</label>
+                <input class="form-control" type="password" id="fNewPass">
+            </div>
+            <div class="form-group full">
+                <label>Confirmar Nova Senha</label>
+                <input class="form-control" type="password" id="fNewPass2">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveNewPassword()">Salvar</button>
+        </div>
+    `);
+}
+
+function saveNewPassword() {
+    const oldPass = document.getElementById('fOldPass').value;
+    const newPass = document.getElementById('fNewPass').value;
+    const newPass2 = document.getElementById('fNewPass2').value;
+    if (!oldPass || !newPass) return toast('Preencha todos os campos', 'error');
+    if (newPass !== newPass2) return toast('As senhas não conferem', 'error');
+    if (newPass.length < 4) return toast('Senha deve ter pelo menos 4 caracteres', 'error');
+
+    const users = getCompanyUsers();
+    const me = users.find(u => u.user.toLowerCase() === currentUserName.toLowerCase());
+    if (!me || me.pass !== oldPass) return toast('Senha atual incorreta', 'error');
+
+    const key = 'sgce_passwords_' + currentCompany;
+    const passwords = JSON.parse(localStorage.getItem(key) || '{}');
+    passwords[currentUserName.toLowerCase()] = newPass;
+    localStorage.setItem(key, JSON.stringify(passwords));
+
+    // Sync to Firebase
+    if (window.firebaseDB) {
+        window.firebaseDB.ref('auth/' + currentCompany + '/passwords').set(passwords)
+            .catch(e => console.warn('Firebase password sync error:', e));
+    }
+
+    closeModal();
+    toast('Senha alterada com sucesso!');
+}
+
+// Load custom passwords from Firebase
+function loadCustomPasswords() {
+    if (!window.firebaseDB) return;
+    Object.keys(COMPANIES).forEach(cid => {
+        window.firebaseDB.ref('auth/' + cid + '/passwords').on('value', snap => {
+            const val = snap.val();
+            if (val) localStorage.setItem('sgce_passwords_' + cid, JSON.stringify(val));
+        });
+    });
 }
 
 function applyRoleRestrictions() {
@@ -5679,15 +5838,21 @@ function mudarStatusSinalizacao(id, novoStatus) {
 // INIT
 // ========================================================================
 document.addEventListener('DOMContentLoaded', () => {
-    migrateContratos();
+    migrateToCompanyData();
     initTheme();
-    initFirebaseSync();
+    loadCustomPasswords();
     setupBeforeUnload();
 
     // Check for existing session
     const savedRole = sessionStorage.getItem('sgce_role');
-    if (savedRole) {
+    const savedCompany = sessionStorage.getItem('sgce_company');
+    if (savedRole && savedCompany) {
         currentUserRole = savedRole;
+        currentUserName = sessionStorage.getItem('sgce_user');
+        currentCompany = savedCompany;
+        DB.clearCache();
+        migrateContratos();
+        initFirebaseSync();
         enterApp();
     } else {
         // Show login screen, hide app
