@@ -5,7 +5,7 @@
 // ========== MULTI-COMPANY ==========
 const COMPANIES = {
     msf: { id: 'msf', nome: 'MS Florestal', sigla: 'MF', cor: '#00ff41' },
-    bracell: { id: 'bracell', nome: 'Bracell MS', sigla: 'BM', cor: '#60a5fa' }
+    bracell: { id: 'bracell', nome: 'Bracell SP', sigla: 'BM', cor: '#60a5fa' }
 };
 let currentCompany = null; // 'msf' or 'bracell'
 
@@ -39,7 +39,7 @@ const DB = {
 };
 
 // ========== FIREBASE REAL-TIME SYNC ==========
-const SYNC_KEYS = ['materiais','fornecedores','contratos','rcs','entregas','pendencias','sinalizacoes','sapConfig','quickNotes','emailConfig','templates_rc'];
+const SYNC_KEYS = ['materiais','fornecedores','contratos','rcs','entregas','pendencias','sinalizacoes','sapConfig','quickNotes','emailConfig','templates_rc','divisoes'];
 let _firebaseReady = false;
 let _syncStatusEl = null;
 let _activeListeners = [];
@@ -2115,8 +2115,7 @@ function editRC(id) {
                 <label>Local de Entrega</label>
                 <select class="form-control" id="fRcLocal">
                     <option value="">Selecione...</option>
-                    <option ${item.localEntrega === 'Divisão Água Clara - MS' ? 'selected' : ''}>Divisão Água Clara - MS</option>
-                    <option ${item.localEntrega === 'Divisão Bataguassu - MS' ? 'selected' : ''}>Divisão Bataguassu - MS</option>
+                    ${getLocaisEntrega().map(loc => `<option ${item.localEntrega === loc ? 'selected' : ''}>${escHtml(loc)}</option>`).join('')}
                 </select>
             </div>
             <div class="form-group">
@@ -5129,9 +5128,10 @@ function viewEmailsEnviados(rcId) {
 // ========================================================================
 let backupPromptEnabled = true;
 
-// ========== INFORMAÇÕES RÁPIDAS (DIVISÕES) ==========
-const DIVISOES = [
+// ========== DIVISÕES (DINÂMICAS POR EMPRESA) ==========
+const MSF_DEFAULT_DIVISOES = [
     {
+        id: 'div_bataguassu',
         nome: 'Divisão Bataguassu - MS',
         empresa: 'MSFC FLORESTAL LTDA',
         cidade: 'Bataguassu - MS',
@@ -5143,6 +5143,7 @@ const DIVISOES = [
         obs: 'Próximo a Fazenda Modelo'
     },
     {
+        id: 'div_aguaclara',
         nome: 'Divisão Água Clara - MS',
         empresa: 'MSFC FLORESTAL LTDA',
         cidade: 'Água Clara - MS',
@@ -5155,16 +5156,33 @@ const DIVISOES = [
     }
 ];
 
+function getDivisoes() {
+    let divs = DB.get('divisoes');
+    if (!divs || divs.length === 0) {
+        if (currentCompany === 'msf') {
+            divs = MSF_DEFAULT_DIVISOES;
+            DB.set('divisoes', divs);
+        } else {
+            divs = [];
+        }
+    }
+    return divs;
+}
+
 function getDivisaoByLocal(localEntrega) {
     if (!localEntrega) return null;
     const local = localEntrega.toLowerCase();
-    if (local.includes('bataguassu')) return DIVISOES[0];
-    if (local.includes('água clara') || local.includes('agua clara')) return DIVISOES[1];
-    return null;
+    const divs = getDivisoes();
+    return divs.find(d => local.includes(d.nome.toLowerCase()) || d.nome.toLowerCase().includes(local)) || null;
+}
+
+function getLocaisEntrega() {
+    return getDivisoes().map(d => d.nome);
 }
 
 function openInfoRapida() {
-    const cards = DIVISOES.map((d, i) => `
+    const divisoes = getDivisoes();
+    const cards = divisoes.map((d, i) => `
         <div class="info-card" id="infoCard${i}" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;position:relative">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
                 <div>
@@ -5172,8 +5190,10 @@ function openInfoRapida() {
                     <span style="font-size:11px;color:var(--text-muted)">Dados cadastrais</span>
                 </div>
                 <div style="display:flex;gap:6px">
-                    <button class="btn-icon" onclick="copiarInfoCard(${i})" title="Copiar texto" style="color:var(--neon)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-                    <button class="btn-icon" onclick="imprimirInfoCard(${i})" title="Imprimir" style="color:var(--info)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
+                    <button class="btn-icon" onclick="copiarInfoCard('${d.id}')" title="Copiar texto" style="color:var(--neon)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+                    ${isAdmin() ? `<button class="btn-icon" onclick="editDivisao('${d.id}')" title="Editar" style="color:var(--warning)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                    <button class="btn-icon danger" onclick="deleteDivisao('${d.id}','${escHtml(d.nome)}')" title="Excluir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>` : ''}
+                    <button class="btn-icon" onclick="imprimirInfoCard('${d.id}')" title="Imprimir" style="color:var(--info)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 20px">
@@ -5191,15 +5211,115 @@ function openInfoRapida() {
 
     openModal('Informações Rápidas — Divisões', `
         <div style="margin-bottom:12px;display:flex;gap:8px;justify-content:flex-end">
-            <button class="btn btn-secondary" onclick="copiarTodasDivisoes()" style="font-size:12px">📋 Copiar Todas</button>
-            <button class="btn btn-secondary" onclick="imprimirTodasDivisoes()" style="font-size:12px">🖨️ Imprimir Todas</button>
+            ${isAdmin() ? `<button class="btn btn-primary" onclick="editDivisao()" style="font-size:12px">+ Nova Divisão</button>` : ''}
+            ${divisoes.length > 0 ? `<button class="btn btn-secondary" onclick="copiarTodasDivisoes()" style="font-size:12px">📋 Copiar Todas</button>
+            <button class="btn btn-secondary" onclick="imprimirTodasDivisoes()" style="font-size:12px">🖨️ Imprimir Todas</button>` : ''}
         </div>
-        ${cards}
+        ${divisoes.length > 0 ? cards : '<p style="color:var(--text-muted);text-align:center;padding:24px">Nenhuma divisão cadastrada. Clique em "+ Nova Divisão" para começar.</p>'}
     `);
 }
 
-function copiarInfoCard(idx) {
-    const d = DIVISOES[idx];
+function editDivisao(id) {
+    const divisoes = getDivisoes();
+    const item = id ? divisoes.find(d => d.id === id) : {};
+    const title = id ? 'Editar Divisão' : 'Nova Divisão';
+
+    openModal(title, `
+        <div class="form-grid">
+            <div class="form-group full">
+                <label>Nome / Local de Entrega <span class="required">*</span></label>
+                <input class="form-control" id="fDivNome" value="${escHtml(item.nome || '')}" placeholder="Ex: Divisão Lençóis Paulista - SP">
+            </div>
+            <div class="form-group full">
+                <label>Empresa</label>
+                <input class="form-control" id="fDivEmpresa" value="${escHtml(item.empresa || '')}">
+            </div>
+            <div class="form-group">
+                <label>Cidade</label>
+                <input class="form-control" id="fDivCidade" value="${escHtml(item.cidade || '')}">
+            </div>
+            <div class="form-group">
+                <label>CNPJ</label>
+                <input class="form-control" id="fDivCnpj" value="${escHtml(item.cnpj || '')}">
+            </div>
+            <div class="form-group">
+                <label>Inscrição Estadual</label>
+                <input class="form-control" id="fDivInsc" value="${escHtml(item.inscricao || '')}">
+            </div>
+            <div class="form-group">
+                <label>Centro</label>
+                <input class="form-control" id="fDivCentro" value="${escHtml(item.centro || '')}">
+            </div>
+            <div class="form-group">
+                <label>Depósito</label>
+                <input class="form-control" id="fDivDeposito" value="${escHtml(item.deposito || '')}">
+            </div>
+            <div class="form-group full">
+                <label>Endereço</label>
+                <input class="form-control" id="fDivEndereco" value="${escHtml(item.endereco || '')}">
+            </div>
+            <div class="form-group full">
+                <label>Observação</label>
+                <input class="form-control" id="fDivObs" value="${escHtml(item.obs || '')}">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-secondary" onclick="openInfoRapida()">Voltar</button>
+            <button class="btn btn-primary" onclick="saveDivisao('${id || ''}')">Salvar</button>
+        </div>
+    `);
+}
+
+function saveDivisao(id) {
+    const nome = $('#fDivNome').value.trim();
+    if (!nome) return toast('Nome é obrigatório', 'error');
+
+    const divisoes = getDivisoes();
+    const obj = {
+        id: id || DB.id(),
+        nome,
+        empresa: $('#fDivEmpresa').value.trim(),
+        cidade: $('#fDivCidade').value.trim(),
+        cnpj: $('#fDivCnpj').value.trim(),
+        inscricao: $('#fDivInsc').value.trim(),
+        centro: $('#fDivCentro').value.trim(),
+        deposito: $('#fDivDeposito').value.trim(),
+        endereco: $('#fDivEndereco').value.trim(),
+        obs: $('#fDivObs').value.trim()
+    };
+
+    if (id) {
+        const idx = divisoes.findIndex(d => d.id === id);
+        if (idx >= 0) divisoes[idx] = obj;
+    } else {
+        divisoes.push(obj);
+    }
+
+    DB.set('divisoes', divisoes);
+    toast(id ? 'Divisão atualizada!' : 'Divisão cadastrada!');
+    openInfoRapida();
+}
+
+function deleteDivisao(id, nome) {
+    openModal('Confirmar Exclusão', `
+        <p>Excluir a divisão <strong>${nome}</strong>?</p>
+        <div class="form-actions">
+            <button class="btn btn-secondary" onclick="openInfoRapida()">Cancelar</button>
+            <button class="btn btn-primary danger" onclick="confirmDeleteDivisao('${id}')">Excluir</button>
+        </div>
+    `);
+}
+
+function confirmDeleteDivisao(id) {
+    const divisoes = getDivisoes().filter(d => d.id !== id);
+    DB.set('divisoes', divisoes);
+    toast('Divisão excluída');
+    openInfoRapida();
+}
+
+function copiarInfoCard(id) {
+    const d = getDivisoes().find(x => x.id === id);
+    if (!d) return;
     const texto = [
         'EMPRESA: ' + d.empresa,
         'CIDADE: ' + d.cidade,
@@ -5219,7 +5339,7 @@ function copiarInfoCard(idx) {
 }
 
 function copiarTodasDivisoes() {
-    const texto = DIVISOES.map(d => {
+    const texto = getDivisoes().map(d => {
         return [
             '═══ ' + d.nome.toUpperCase() + ' ═══',
             'EMPRESA: ' + d.empresa,
@@ -5311,8 +5431,9 @@ function copyAsImage() {
 </body></html>`;
 }
 
-function imprimirInfoCard(idx) {
-    const d = DIVISOES[idx];
+function imprimirInfoCard(id) {
+    const d = getDivisoes().find(x => x.id === id);
+    if (!d) return;
     const html = gerarPaginaDivisaoPrint('Informações da Divisão', [d]);
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); }
@@ -5320,7 +5441,7 @@ function imprimirInfoCard(idx) {
 }
 
 function imprimirTodasDivisoes() {
-    const html = gerarPaginaDivisaoPrint('Informações das Divisões', DIVISOES);
+    const html = gerarPaginaDivisaoPrint('Informações das Divisões', getDivisoes());
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); }
     else toast('Bloqueio de popups. Permita popups para imprimir.', 'error');
