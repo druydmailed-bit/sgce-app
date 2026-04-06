@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="24" fill="#0a0a0f"/>
+  <text x="96" y="110" text-anchor="middle" font-family="Arial,sans-serif" font-size="48" font-weight="bold" fill="#00ff41">SGCE</text>
+  <path d="M72 40h-16a8 8 0 00-8 8v96a8 8 0 008 8h80a8 8 0 008-8V72l-32-32z" fill="none" stroke="#00ff41" stroke-width="3" opacity="0.3"/>
+</svg>

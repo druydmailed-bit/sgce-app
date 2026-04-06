@@ -250,6 +250,8 @@ function enterApp() {
     }
     applyRoleRestrictions();
     renderCurrentTab();
+    // Auto backup weekly
+    setTimeout(autoBackupToFirebase, 3000);
 }
 
 function logout() {
@@ -334,7 +336,7 @@ function loadCustomPasswords() {
 
 function applyRoleRestrictions() {
     const navItems = document.querySelectorAll('.nav-item');
-    const consultaTabs = ['entregas', 'sinalizacao'];
+    const consultaTabs = ['dashboard', 'entregas', 'sinalizacao'];
     const consultaBanner = document.getElementById('consultaBanner');
 
     if (currentUserRole === 'consulta') {
@@ -348,8 +350,8 @@ function applyRoleRestrictions() {
         // Hide sidebar backup section
         const sidebarBackup = document.querySelector('.sidebar-backup');
         if (sidebarBackup) sidebarBackup.style.display = 'none';
-        // Navigate to Entregas by default
-        navigate('entregas');
+        // Navigate to Dashboard by default in consulta mode
+        navigate('dashboard');
     } else {
         // Show all nav items including sinalizacao for admin
         navItems.forEach(el => { el.style.display = ''; });
@@ -368,11 +370,16 @@ const $$ = sel => document.querySelectorAll(sel);
 // ========== STATE ==========
 let currentTab = 'dashboard';
 let rcStatusFilter = 'Todas';
+let rcDivisaoFilter = '';
+let entregasDivisaoFilter = '';
 let dateFilterDe = '';
 let dateFilterAte = '';
 let calendarYear = new Date().getFullYear();
 let calendarMonth = new Date().getMonth();
 let entregasHideRecebidas = true;
+const PAGE_SIZE = 50;
+let rcPage = 1;
+let entregasPage = 1;
 
 // ========== NAVIGATION ==========
 function navigate(tab) {
@@ -564,6 +571,18 @@ function renderTable(headers, rows, emptyMsg = 'Nenhum registro encontrado') {
     </table></div></div>`;
 }
 
+function renderPagination(currentPage, totalPages, pageVar, renderFn) {
+    if (totalPages <= 1) return '';
+    let html = '<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;padding:8px">';
+    html += `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="${pageVar}=1;${renderFn}()" ${currentPage <= 1 ? 'disabled' : ''}>«</button>`;
+    html += `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="${pageVar}--;${renderFn}()" ${currentPage <= 1 ? 'disabled' : ''}>‹</button>`;
+    html += `<span style="font-size:12px;color:var(--text-muted);min-width:80px;text-align:center">${currentPage} / ${totalPages}</span>`;
+    html += `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="${pageVar}++;${renderFn}()" ${currentPage >= totalPages ? 'disabled' : ''}>›</button>`;
+    html += `<button class="btn btn-secondary" style="padding:4px 10px;font-size:12px" onclick="${pageVar}=${totalPages};${renderFn}()" ${currentPage >= totalPages ? 'disabled' : ''}>»</button>`;
+    html += '</div>';
+    return html;
+}
+
 function actionBtns(editFn, deleteFn, viewFn) {
     let html = '<div class="actions">';
     if (viewFn) html += `<button class="btn-icon" onclick="${viewFn}" title="Ver detalhes"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
@@ -595,6 +614,89 @@ function renderDashboard() {
     const contratos = DB.get('contratos');
     const rcs = DB.get('rcs');
     const entregas = DB.get('entregas');
+
+    // ===== CONSULTA MODE DASHBOARD =====
+    if (currentUserRole === 'consulta') {
+        const hoje = new Date().toISOString().split('T')[0];
+        const emRota = entregas.filter(e => e.status === 'Rota de Entrega');
+        const pendentes = entregas.filter(e => e.status === 'Pendente');
+        const atrasadas = entregas.filter(e => (e.status === 'Pendente' || e.status === 'Rota de Entrega') && e.dataPrevisao && e.dataPrevisao < hoje);
+        const recebidasMes = entregas.filter(e => e.status === 'Recebida' && e.dataRecebimento && e.dataRecebimento.substring(0, 7) === hoje.substring(0, 7));
+        const sinalizacoes = DB.get('sinalizacoes') || [];
+        const sinAbertasCount = sinalizacoes.filter(s => s.status === 'Aberta' || s.status === 'Em Análise').length;
+
+        const rotaCards = emRota.map(e => {
+            const rc = rcs.find(r => r.id === e.rcId);
+            const mat = rc ? materiais.find(m => m.id === rc.materialId) : null;
+            const contrato = rc ? contratos.find(c => c.id === rc.contratoId) : null;
+            const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+                <span><strong>${mat ? escHtml(mat.nome) : '—'}</strong> — ${forn ? escHtml(forn.nome) : '—'}</span>
+                <span style="font-size:11px;color:var(--text-muted)">${fmtDate(e.dataPrevisao)}</span>
+            </div>`;
+        }).join('');
+
+        const atrasadasCards = atrasadas.map(e => {
+            const rc = rcs.find(r => r.id === e.rcId);
+            const mat = rc ? materiais.find(m => m.id === rc.materialId) : null;
+            const diasAtraso = Math.ceil((new Date() - new Date(e.dataPrevisao + 'T00:00:00')) / 86400000);
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,71,87,0.15);font-size:13px">
+                <span>${mat ? escHtml(mat.nome) : '—'} — NF ${escHtml(e.notaFiscal || '—')}</span>
+                <span style="color:var(--danger);font-weight:600;font-size:12px">${diasAtraso}d atraso</span>
+            </div>`;
+        }).join('');
+
+        $('#content').innerHTML = `
+            <div class="page-header"><h2>Painel de Consulta</h2></div>
+            <div class="stats-grid">
+                <div class="stat-card" onclick="navigate('entregas')" style="cursor:pointer">
+                    <div class="stat-icon" style="background:rgba(0,255,65,0.15);color:var(--neon)">🚚</div>
+                    <div class="stat-info">
+                        <span class="stat-value">${emRota.length}</span>
+                        <span class="stat-label">Em Rota de Entrega</span>
+                    </div>
+                </div>
+                <div class="stat-card" onclick="navigate('entregas')" style="cursor:pointer">
+                    <div class="stat-icon orange">⏳</div>
+                    <div class="stat-info">
+                        <span class="stat-value">${pendentes.length}</span>
+                        <span class="stat-label">Pendentes</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon red">🚨</div>
+                    <div class="stat-info">
+                        <span class="stat-value">${atrasadas.length}</span>
+                        <span class="stat-label">Em Atraso</span>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon blue">✅</div>
+                    <div class="stat-info">
+                        <span class="stat-value">${recebidasMes.length}</span>
+                        <span class="stat-label">Recebidas este mês</span>
+                    </div>
+                </div>
+                ${sinAbertasCount > 0 ? `<div class="stat-card" onclick="navigate('sinalizacao')" style="cursor:pointer">
+                    <div class="stat-icon orange">📢</div>
+                    <div class="stat-info">
+                        <span class="stat-value">${sinAbertasCount}</span>
+                        <span class="stat-label">Sinalizações Abertas</span>
+                    </div>
+                </div>` : ''}
+            </div>
+            ${emRota.length > 0 ? `<div class="dashboard-card" style="margin-bottom:16px">
+                <div class="dashboard-card-header"><h4>🚚 Em Rota de Entrega</h4></div>
+                <div class="dashboard-card-body">${rotaCards}</div>
+            </div>` : ''}
+            ${atrasadas.length > 0 ? `<div class="dashboard-card" style="border-color:rgba(255,71,87,0.3)">
+                <div class="dashboard-card-header"><h4 style="color:var(--danger)">🚨 Entregas em Atraso</h4></div>
+                <div class="dashboard-card-body">${atrasadasCards}</div>
+            </div>` : ''}
+            ${emRota.length === 0 && atrasadas.length === 0 ? '<div style="text-align:center;padding:40px;color:var(--text-muted)"><p style="font-size:16px;margin-bottom:8px">Tudo em dia!</p><p style="font-size:13px">Nenhuma entrega em rota ou atrasada.</p></div>' : ''}
+        `;
+        return;
+    }
 
     const pendencias = DB.get('pendencias');
     const contratosAtivos = contratos.filter(c => c.status === 'Ativo').length;
@@ -1928,11 +2030,14 @@ function renderRCs() {
     // Filtros
     let filteredData = data;
     if (rcStatusFilter !== 'Todas') filteredData = filteredData.filter(rc => rc.status === rcStatusFilter);
+    if (rcDivisaoFilter) filteredData = filteredData.filter(rc => rc.localEntrega === rcDivisaoFilter);
     if (dateFilterDe) filteredData = filteredData.filter(rc => rc.data >= dateFilterDe);
     if (dateFilterAte) filteredData = filteredData.filter(rc => rc.data <= dateFilterAte);
 
     const statusFilters = ['Todas', 'Pendente', 'Aprovada', 'Em Andamento', 'Concluída', 'Cancelada'];
     const filterBarHtml = `<div class="filter-pills">${statusFilters.map(s => `<button class="pill-btn ${rcStatusFilter === s ? 'pill-active' : ''}" onclick="setRcStatusFilter('${s}')">${s}</button>`).join('')}</div>`;
+    const locais = getLocaisEntrega();
+    const divisaoFilterHtml = locais.length > 1 ? `<select class="form-control" style="width:auto;padding:6px 10px;font-size:12px;display:inline-block;margin-left:8px" onchange="rcDivisaoFilter=this.value;rcPage=1;renderRCs()"><option value="">Todas divisões</option>${locais.map(l => `<option value="${escHtml(l)}" ${rcDivisaoFilter === l ? 'selected' : ''}>${escHtml(l)}</option>`).join('')}</select>` : '';
     const dateFilterHtml = `<div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap"><label style="font-size:12px;color:var(--text-secondary)">Período:</label><input class="form-control" type="text" id="fDateDe" placeholder="De DD/MM/AAAA" maxlength="10" value="${dateToBR(dateFilterDe)}" style="width:130px;padding:6px 10px;font-size:12px" onchange="applyDateFilter()"><input class="form-control" type="text" id="fDateAte" placeholder="Até DD/MM/AAAA" maxlength="10" value="${dateToBR(dateFilterAte)}" style="width:130px;padding:6px 10px;font-size:12px" onchange="applyDateFilter()">${(dateFilterDe || dateFilterAte) ? `<button class="btn-icon" onclick="clearDateFilter()" title="Limpar filtro data"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>` : ''}</div>`;
 
     // Mobile card view for consulta mode
@@ -2028,11 +2133,17 @@ function renderRCs() {
         </tr>`;
     });
 
+    const totalPages = Math.ceil(rows.length / PAGE_SIZE);
+    if (rcPage > totalPages && totalPages > 0) rcPage = totalPages;
+    const pagedRows = rows.slice((rcPage - 1) * PAGE_SIZE, rcPage * PAGE_SIZE);
+    const paginationHtml = totalPages > 1 ? renderPagination(rcPage, totalPages, 'rcPage', 'renderRCs') : '';
+
     $('#content').innerHTML = `
         <div class="page-header">
-            <h2>Requisições de Compra</h2>
+            <h2>Requisições de Compra <span style="font-size:12px;color:var(--text-muted);font-weight:400">(${filteredData.length})</span></h2>
             <div class="page-actions">
                 ${searchHtml}
+                ${divisaoFilterHtml}
                 ${isAdmin() ? `<button class="btn btn-secondary" onclick="exportCSV('rcs')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
                 <button class="btn btn-secondary" onclick="openRelatorioMensal()" style="font-size:12px">📊 Mensal</button>
                 <button class="btn btn-secondary" onclick="printRelatorioRCs()" style="font-size:12px">🖨️ Relatório</button>
@@ -2041,7 +2152,8 @@ function renderRCs() {
         </div>
         ${filterBarHtml}
         ${dateFilterHtml}
-        ${renderTable(['Nº RC', 'PC', 'Contrato', 'Fornecedor', 'Material', 'Qtd', 'Valor Unit.', 'Local Entrega', 'Data', 'Previsão', 'Status', ''], rows, 'Nenhuma RC cadastrada')}
+        ${renderTable(['Nº RC', 'PC', 'Contrato', 'Fornecedor', 'Material', 'Qtd', 'Valor Unit.', 'Local Entrega', 'Data', 'Previsão', 'Status', ''], pagedRows, 'Nenhuma RC cadastrada')}
+        ${paginationHtml}
     `;
 }
 
@@ -2801,7 +2913,16 @@ function renderEntregas() {
 
     const statusOcultos = ['Recebida', 'Parcial'];
     const totalOcultas = data.filter(e => statusOcultos.includes(e.status)).length;
-    const filteredData = entregasHideRecebidas ? data.filter(e => !statusOcultos.includes(e.status)) : data;
+    let filteredData = entregasHideRecebidas ? data.filter(e => !statusOcultos.includes(e.status)) : data;
+    if (entregasDivisaoFilter) {
+        filteredData = filteredData.filter(e => {
+            const rc = rcs.find(r => r.id === e.rcId);
+            const localEnt = e.localEntrega || (rc ? rc.localEntrega : '') || '';
+            return localEnt === entregasDivisaoFilter;
+        });
+    }
+    const locaisEnt = getLocaisEntrega();
+    const entDivisaoFilterHtml = locaisEnt.length > 1 ? `<select class="form-control" style="width:auto;padding:6px 10px;font-size:12px;display:inline-block;margin-left:8px" onchange="entregasDivisaoFilter=this.value;entregasPage=1;renderEntregas()"><option value="">Todas divisões</option>${locaisEnt.map(l => `<option value="${escHtml(l)}" ${entregasDivisaoFilter === l ? 'selected' : ''}>${escHtml(l)}</option>`).join('')}</select>` : '';
 
     // Row-based view for consulta mode
     if (!isAdmin()) {
@@ -2845,6 +2966,7 @@ function renderEntregas() {
                 <h2>Entregas</h2>
                 <div class="page-actions">
                     ${searchHtml}
+                    ${entDivisaoFilterHtml}
                     ${totalOcultas > 0 ? `<button class="filter-toggle ${entregasHideRecebidas ? 'active' : ''}" onclick="toggleEntregasRecebidas()">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1h22l-9.2 10.8V20l-3.6 2V11.8z"/></svg>
                         ${entregasHideRecebidas ? 'Ocultas (' + totalOcultas + ')' : 'Mostrar todas'}
@@ -2904,11 +3026,17 @@ function renderEntregas() {
 
     const temRotaEntrega = data.some(e => e.status === 'Rota de Entrega');
 
+    const totalEntregasPages = Math.ceil(rows.length / PAGE_SIZE);
+    if (entregasPage > totalEntregasPages && totalEntregasPages > 0) entregasPage = totalEntregasPages;
+    const pagedEntregasRows = rows.slice((entregasPage - 1) * PAGE_SIZE, entregasPage * PAGE_SIZE);
+    const entregasPaginationHtml = totalEntregasPages > 1 ? renderPagination(entregasPage, totalEntregasPages, 'entregasPage', 'renderEntregas') : '';
+
     $('#content').innerHTML = `
         <div class="page-header">
-            <h2>Controle de Entregas</h2>
+            <h2>Controle de Entregas <span style="font-size:12px;color:var(--text-muted);font-weight:400">(${filteredData.length})</span></h2>
             <div class="page-actions">
                 ${searchHtml}
+                ${entDivisaoFilterHtml}
                 ${totalOcultas > 0 ? `<button class="filter-toggle ${entregasHideRecebidas ? 'active' : ''}" onclick="toggleEntregasRecebidas()">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 1h22l-9.2 10.8V20l-3.6 2V11.8z"/></svg>
                     ${entregasHideRecebidas ? 'Ocultas (' + totalOcultas + ')' : 'Mostrar todas'}
@@ -2919,7 +3047,8 @@ function renderEntregas() {
                 <button class="btn btn-primary" onclick="editEntrega()">+ Nova Entrega</button>` : ''}
             </div>
         </div>
-        ${renderTable(['RC', 'PC', 'Fornecedor', 'Material', 'Qtd', 'NF', 'Local Entrega', 'Data Solicitação', 'Previsão Entrega', 'Dt Recebimento', 'Status', ''], rows, 'Nenhuma entrega cadastrada')}
+        ${renderTable(['RC', 'PC', 'Fornecedor', 'Material', 'Qtd', 'NF', 'Local Entrega', 'Data Solicitação', 'Previsão Entrega', 'Dt Recebimento', 'Status', ''], pagedEntregasRows, 'Nenhuma entrega cadastrada')}
+        ${entregasPaginationHtml}
     `;
 }
 
@@ -3908,11 +4037,12 @@ function doGlobalSearch(query) {
         total += conResults.length;
     }
 
-    // RCs
+    // RCs (busca por nº, PC, contrato, material, local)
     const rcResults = rcs.filter(rc => {
         const contrato = contratos.find(c => c.id === rc.contratoId);
         const mat = materiais.find(m => m.id === rc.materialId);
-        return (rc.numero + ' ' + (contrato ? contrato.numero : '') + ' ' + (mat ? mat.nome : '') + ' ' + (rc.localEntrega || '')).toLowerCase().includes(q);
+        const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
+        return (rc.numero + ' ' + (rc.pedidoCompra || '') + ' ' + (contrato ? contrato.numero : '') + ' ' + (mat ? mat.nome : '') + ' ' + (forn ? forn.nome : '') + ' ' + (rc.localEntrega || '')).toLowerCase().includes(q);
     });
     if (rcResults.length > 0) {
         html += '<div class="search-group-title">📝 Requisições</div>';
@@ -3926,17 +4056,23 @@ function doGlobalSearch(query) {
         total += rcResults.length;
     }
 
-    // Entregas
+    // Entregas (busca por NF, RC, PC, material, fornecedor)
     const entResults = entregas.filter(e => {
         const rc = rcs.find(r => r.id === e.rcId);
-        return ((e.notaFiscal || '') + ' ' + (rc ? rc.numero : '')).toLowerCase().includes(q);
+        const mat = rc ? materiais.find(m => m.id === rc.materialId) : null;
+        const contrato = rc ? contratos.find(c => c.id === rc.contratoId) : null;
+        const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
+        return ((e.notaFiscal || '') + ' ' + (rc ? rc.numero : '') + ' ' + (rc ? rc.pedidoCompra || '' : '') + ' ' + (mat ? mat.nome : '') + ' ' + (forn ? forn.nome : '') + ' ' + (e.localEntrega || '')).toLowerCase().includes(q);
     });
     if (entResults.length > 0) {
         html += '<div class="search-group-title">🚚 Entregas</div>';
-        entResults.slice(0, 5).forEach(e => {
+        entResults.slice(0, 8).forEach(e => {
             const rc = rcs.find(r => r.id === e.rcId);
+            const mat = rc ? materiais.find(m => m.id === rc.materialId) : null;
+            const contrato = rc ? contratos.find(c => c.id === rc.contratoId) : null;
+            const forn = contrato ? fornecedores.find(f => f.id === contrato.fornecedorId) : null;
             html += `<div class="search-result-item" onclick="closeGlobalSearch(); navigate('entregas')">
-                <div class="sr-main"><div class="sr-title">NF ${escHtml(e.notaFiscal || '—')}</div><div class="sr-sub">RC ${rc ? escHtml(rc.numero) : '—'} · ${fmtDate(e.data)}</div></div>
+                <div class="sr-main"><div class="sr-title">NF ${escHtml(e.notaFiscal || '—')} — ${mat ? escHtml(mat.nome) : '—'}</div><div class="sr-sub">RC ${rc ? escHtml(rc.numero) : '—'} ${rc && rc.pedidoCompra ? '· PC ' + escHtml(rc.pedidoCompra) : ''} · ${forn ? escHtml(forn.nome) : '—'} · ${fmtDate(e.data)}</div></div>
                 ${badge(e.status, entregaStatusColor(e.status))}
             </div>`;
         });
@@ -4883,6 +5019,45 @@ function exportBackup() {
     toast(`Backup exportado: ${filename}`);
 }
 
+function autoBackupToFirebase() {
+    if (!window.firebaseDB || !currentCompany) return;
+    const lastKey = 'sgce_lastAutoBackup_' + currentCompany;
+    const lastBackup = localStorage.getItem(lastKey);
+    const now = Date.now();
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    if (lastBackup && (now - parseInt(lastBackup)) < weekMs) return;
+
+    const keys = ['materiais', 'fornecedores', 'contratos', 'rcs', 'entregas', 'pendencias', 'sinalizacoes'];
+    const backup = {};
+    keys.forEach(key => { backup[key] = DB.get(key); });
+    backup._meta = { app: 'SGCE', version: '2.0', date: new Date().toISOString(), company: currentCompany };
+    backup.emailConfig = DB.get('emailConfig');
+    backup.quickNotes = DB.get('quickNotes');
+    backup.activityLog = DB.get('activitylog') || [];
+    backup.rcTemplates = DB.get('rc_templates') || [];
+    backup.sapConfig = DB.get('sapConfig');
+    backup.divisoes = DB.get('divisoes') || [];
+
+    const dateStr = new Date().toISOString().split('T')[0];
+    const path = 'autobackups/' + currentCompany + '/' + dateStr;
+    window.firebaseDB.ref(path).set(backup).then(() => {
+        localStorage.setItem(lastKey, String(now));
+        console.log('Auto backup saved to Firebase:', path);
+        // Keep only last 4 backups
+        window.firebaseDB.ref('autobackups/' + currentCompany).orderByKey().once('value', snap => {
+            const backups = snap.val();
+            if (backups) {
+                const keys = Object.keys(backups).sort();
+                if (keys.length > 4) {
+                    keys.slice(0, keys.length - 4).forEach(k => {
+                        window.firebaseDB.ref('autobackups/' + currentCompany + '/' + k).remove();
+                    });
+                }
+            }
+        });
+    }).catch(e => console.warn('Auto backup error:', e));
+}
+
 function importBackup(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -5452,14 +5627,19 @@ function imprimirTodasDivisoes() {
 // ========================================================================
 function logActivity(action, entity, detail) {
     const log = DB.get('activitylog') || [];
-    log.unshift({ date: new Date().toISOString(), action, entity, detail: detail || '' });
-    if (log.length > 200) log.length = 200;
+    log.unshift({
+        date: new Date().toISOString(),
+        action, entity, detail: detail || '',
+        user: sessionStorage.getItem('sgce_user') || '—',
+        company: currentCompany || '—'
+    });
+    if (log.length > 500) log.length = 500;
     DB.set('activitylog', log);
 }
 
 function viewActivityLog() {
     const log = DB.get('activitylog') || [];
-    const items = log.slice(0, 50);
+    const items = log.slice(0, 100);
     const actionIcon = { criou: '+', editou: '✎', excluiu: '✕' };
     const actionColor = { criou: 'var(--neon)', editou: 'var(--info)', excluiu: 'var(--danger)' };
     const rows = items.length === 0
@@ -5467,14 +5647,15 @@ function viewActivityLog() {
         : items.map(a => {
             const d = new Date(a.date);
             const dateStr = d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'});
+            const userName = a.user || '—';
             return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
                 <span style="width:22px;height:22px;border-radius:50%;background:${actionColor[a.action] || 'var(--text-muted)'};color:#000;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0">${actionIcon[a.action] || '?'}</span>
-                <span style="flex:1"><strong style="color:${actionColor[a.action] || 'var(--text)'}">${escHtml(a.action)}</strong> ${escHtml(a.entity)} ${a.detail ? '<span style="color:var(--text-secondary)">— ' + escHtml(a.detail) + '</span>' : ''}</span>
+                <span style="flex:1"><strong style="color:${actionColor[a.action] || 'var(--text)'}">${escHtml(a.action)}</strong> ${escHtml(a.entity)} ${a.detail ? '<span style="color:var(--text-secondary)">— ' + escHtml(a.detail) + '</span>' : ''}<br><span style="font-size:11px;color:var(--text-muted)">por ${escHtml(userName)}</span></span>
                 <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${dateStr}</span>
             </div>`;
         }).join('');
 
-    openModal('Log de Atividades', `
+    openModal('Histórico de Alterações', `
         <div style="max-height:400px;overflow-y:auto;margin-bottom:16px">${rows}</div>
         <div class="form-actions">
             <button class="btn btn-secondary" onclick="closeModal()">Fechar</button>
