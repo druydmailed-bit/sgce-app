@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sgce-v11';
+const CACHE_NAME = 'sgce-v12';
 const ASSETS = [
   './',
   './index.html',

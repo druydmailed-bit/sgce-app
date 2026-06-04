@@ -2047,7 +2047,10 @@ function saveAditivo(contratoId) {
 // REQUISIÇÕES DE COMPRA (RCs)
 // ========================================================================
 function renderRCs() {
-    const data = DB.get('rcs');
+    const allData = DB.get('rcs');
+    const showArquivadosRCs = !!window._showArquivadosRCs;
+    const data = showArquivadosRCs ? allData : allData.filter(rc => !rc.arquivado);
+    const arquivadosRCsCount = allData.filter(rc => rc.arquivado).length;
     const contratos = DB.get('contratos');
     const fornecedores = DB.get('fornecedores');
     const materiais = DB.get('materiais');
@@ -2132,9 +2135,11 @@ function renderRCs() {
         const mat = materiais.find(m => m.id === rc.materialId);
         const semRcBadge = rc.semRC ? ' <span class="badge badge-orange" style="font-size:9px;padding:2px 6px">SEM RC</span>' : '';
         const rcDiv = getDivisaoByLocal(rc.localEntrega);
+        const rowStyle = rc.arquivado ? ' style="opacity:0.5"' : '';
+        const arquivadoBadge = rc.arquivado ? ` ${badge('Arquivado', 'gray')}` : '';
 
-        return `<tr class="clickable-row" onclick="if(!event.target.closest('.actions'))verDetalhesRC('${rc.id}')" data-search="${escHtml((rc.numero + ' ' + (contrato ? contrato.numero : '') + ' ' + (forn ? forn.nome : '') + ' ' + (mat ? mat.nome : '') + ' ' + (rc.localEntrega || '')).toLowerCase())}">
-            <td><strong>${escHtml(rc.numero)}</strong>${cpBtn(rc.numero)}${semRcBadge}</td>
+        return `<tr class="clickable-row"${rowStyle} onclick="if(!event.target.closest('.actions'))verDetalhesRC('${rc.id}')" data-search="${escHtml((rc.numero + ' ' + (contrato ? contrato.numero : '') + ' ' + (forn ? forn.nome : '') + ' ' + (mat ? mat.nome : '') + ' ' + (rc.localEntrega || '')).toLowerCase())}">
+            <td><strong>${escHtml(rc.numero)}</strong>${cpBtn(rc.numero)}${semRcBadge}${arquivadoBadge}</td>
             <td>${rc.pedidoCompra ? `<strong style="color:var(--info)">${escHtml(rc.pedidoCompra)}</strong>${cpBtn(rc.pedidoCompra)}` : '<span style="color:var(--text-muted);font-size:11px">—</span>'}</td>
             <td>${contrato ? escHtml(contrato.numero) + cpBtn(contrato.numero) : '—'}</td>
             <td>${forn ? escHtml(forn.nome) : '—'}</td>
@@ -2154,6 +2159,9 @@ function renderRCs() {
                 <button class="btn-icon" onclick="duplicarRC('${rc.id}')" title="Duplicar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>` : ''}
                 <button class="btn-icon" onclick="printRC('${rc.id}')" title="Imprimir extrato"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg></button>
                 ${isAdmin() ? `<button class="btn-icon" onclick="editRC('${rc.id}')" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                ${rc.arquivado
+                    ? `<button class="btn-icon" onclick="toggleArquivarRC('${rc.id}')" title="Desarquivar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v4H3zM5 7v13a1 1 0 001 1h12a1 1 0 001-1V7"/><path d="M9 11l3 3 3-3"/><path d="M12 14v-4"/></svg></button>`
+                    : `<button class="btn-icon" onclick="toggleArquivarRC('${rc.id}')" title="Arquivar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v4H3zM5 7v13a1 1 0 001 1h12a1 1 0 001-1V7"/><path d="M9 12h6"/></svg></button>`}
                 <button class="btn-icon danger" onclick="deleteRC('${rc.id}','${escHtml(rc.numero)}')" title="Excluir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>` : ''}
             </div></td>
         </tr>`;
@@ -2170,6 +2178,7 @@ function renderRCs() {
             <div class="page-actions">
                 ${searchHtml}
                 ${divisaoFilterHtml}
+                ${isAdmin() && arquivadosRCsCount > 0 ? `<button class="btn btn-secondary" onclick="toggleMostrarArquivadosRCs()" style="font-size:12px">${showArquivadosRCs ? '🙈 Ocultar arquivadas' : `📦 Arquivadas (${arquivadosRCsCount})`}</button>` : ''}
                 ${isAdmin() ? `<button class="btn btn-secondary" onclick="exportCSV('rcs')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
                 <button class="btn btn-secondary" onclick="openRelatorioMensal()" style="font-size:12px">📊 Mensal</button>
                 <button class="btn btn-secondary" onclick="printRelatorioRCs()" style="font-size:12px">🖨️ Relatório</button>
@@ -2181,6 +2190,23 @@ function renderRCs() {
         ${renderTable(['Nº RC', 'PC', 'Contrato', 'Fornecedor', 'Material', 'Qtd', 'Valor Unit.', 'Local Entrega', 'Data', 'Previsão', 'Status', ''], pagedRows, 'Nenhuma RC cadastrada')}
         ${paginationHtml}
     `;
+}
+
+function toggleArquivarRC(id) {
+    const data = DB.get('rcs');
+    const idx = data.findIndex(r => r.id === id);
+    if (idx < 0) return;
+    const novoEstado = !data[idx].arquivado;
+    data[idx].arquivado = novoEstado;
+    DB.set('rcs', data);
+    toast(novoEstado ? 'RC arquivada!' : 'RC desarquivada!');
+    logActivity(novoEstado ? 'arquivou' : 'desarquivou', 'RC', data[idx].numero);
+    renderRCs();
+}
+
+function toggleMostrarArquivadosRCs() {
+    window._showArquivadosRCs = !window._showArquivadosRCs;
+    renderRCs();
 }
 
 function editRC(id) {
