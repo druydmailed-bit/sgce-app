@@ -1523,7 +1523,10 @@ function viewFornecedor(id) {
 // CONTRATOS
 // ========================================================================
 function renderContratos() {
-    const data = DB.get('contratos');
+    const allData = DB.get('contratos');
+    const showArquivados = !!window._showArquivados;
+    const data = showArquivados ? allData : allData.filter(c => !c.arquivado);
+    const arquivadosCount = allData.filter(c => c.arquivado).length;
     const fornecedores = DB.get('fornecedores');
     const searchHtml = `<div class="search-box">${searchIcon}<input class="search-input" placeholder="Buscar contrato..." oninput="filterTable(this.value)"></div>`;
 
@@ -1545,9 +1548,11 @@ function renderContratos() {
             : '<span style="color:var(--text-muted)">—</span>';
         const aditivosCount = (c.aditivos || []).length;
         const valorTotal = c.valor || getContratoValorTotal(c);
+        const rowStyle = c.arquivado ? ' style="opacity:0.5"' : '';
+        const arquivadoBadge = c.arquivado ? ` ${badge('Arquivado', 'gray')}` : '';
 
-        return `<tr class="clickable-row" onclick="if(!event.target.closest('.actions'))verDetalhesContrato('${c.id}')" data-search="${escHtml((c.numero + ' ' + c.descricao + ' ' + (forn ? forn.nome : '') + ' ' + matNamesStr).toLowerCase())}">
-            <td><strong>${escHtml(c.numero)}</strong>${cpBtn(c.numero)}${aditivosCount > 0 ? ` <span style="font-size:10px;color:var(--info)">(${aditivosCount} adit.)</span>` : ''}</td>
+        return `<tr class="clickable-row"${rowStyle} onclick="if(!event.target.closest('.actions'))verDetalhesContrato('${c.id}')" data-search="${escHtml((c.numero + ' ' + c.descricao + ' ' + (forn ? forn.nome : '') + ' ' + matNamesStr).toLowerCase())}">
+            <td><strong>${escHtml(c.numero)}</strong>${cpBtn(c.numero)}${aditivosCount > 0 ? ` <span style="font-size:10px;color:var(--info)">(${aditivosCount} adit.)</span>` : ''}${arquivadoBadge}</td>
             <td>${forn ? escHtml(forn.nome) : '<span style="color:var(--text-muted)">—</span>'}</td>
             <td>${matNames.length > 0 ? matNames.map(n => escHtml(n)).join('<br>') : '<span style="color:var(--text-muted)">—</span>'}</td>
             <td>${progressHtml}</td>
@@ -1558,6 +1563,9 @@ function renderContratos() {
             <td class="col-actions"><div class="actions">
                 <button class="btn-icon" onclick="viewAditivos('${c.id}')" title="Aditivos"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
                 <button class="btn-icon" onclick="editContrato('${c.id}')" title="Editar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+                ${c.arquivado
+                    ? `<button class="btn-icon" onclick="toggleArquivarContrato('${c.id}')" title="Desarquivar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v4H3zM5 7v13a1 1 0 001 1h12a1 1 0 001-1V7"/><path d="M9 11l3 3 3-3"/><path d="M12 14v-4"/></svg></button>`
+                    : `<button class="btn-icon" onclick="toggleArquivarContrato('${c.id}')" title="Arquivar"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v4H3zM5 7v13a1 1 0 001 1h12a1 1 0 001-1V7"/><path d="M9 12h6"/></svg></button>`}
                 <button class="btn-icon danger" onclick="deleteContrato('${c.id}','${escHtml(c.numero)}')" title="Excluir"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>
             </div></td>
         </tr>`;
@@ -1568,12 +1576,30 @@ function renderContratos() {
             <h2>Contratos</h2>
             <div class="page-actions">
                 ${searchHtml}
+                ${arquivadosCount > 0 ? `<button class="btn btn-secondary" onclick="toggleMostrarArquivados()" style="font-size:12px">${showArquivados ? '🙈 Ocultar arquivados' : `📦 Arquivados (${arquivadosCount})`}</button>` : ''}
                 <button class="btn btn-secondary" onclick="exportCSV('contratos')" style="font-size:12px" title="Exportar CSV">📥 CSV</button>
                 <button class="btn btn-primary" onclick="editContrato()">+ Novo Contrato</button>
             </div>
         </div>
-        ${renderTable(['Nº Contrato', 'Fornecedor', 'Material', 'Consumo', 'Preço Unit.', 'Valor Total', 'Vigência', 'Status', ''], rows, 'Nenhum contrato cadastrado')}
+        ${renderTable(['Nº Contrato', 'Fornecedor', 'Material', 'Consumo', 'Preço Unit.', 'Valor Total', 'Vigência', 'Status', ''], rows, showArquivados ? 'Nenhum contrato arquivado' : 'Nenhum contrato cadastrado')}
     `;
+}
+
+function toggleArquivarContrato(id) {
+    const data = DB.get('contratos');
+    const idx = data.findIndex(c => c.id === id);
+    if (idx < 0) return;
+    const novoEstado = !data[idx].arquivado;
+    data[idx].arquivado = novoEstado;
+    DB.set('contratos', data);
+    toast(novoEstado ? 'Contrato arquivado!' : 'Contrato desarquivado!');
+    logActivity(novoEstado ? 'arquivou' : 'desarquivou', 'Contrato', data[idx].numero);
+    renderContratos();
+}
+
+function toggleMostrarArquivados() {
+    window._showArquivados = !window._showArquivados;
+    renderContratos();
 }
 
 function editContrato(id) {
